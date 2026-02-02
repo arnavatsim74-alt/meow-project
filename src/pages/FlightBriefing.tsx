@@ -1,19 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { Plane, ArrowLeft, RefreshCw, Map, FileText, ExternalLink, Search, Send, Info, Download } from 'lucide-react';
+import { Plane, ArrowLeft, RefreshCw, Map, FileText, ExternalLink, Send, Info, Download, Loader2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
 import { useSimBriefOFP, OFPData } from '@/hooks/useSimBriefOFP';
 import { IFAirportCard } from '@/components/aviation/IFAirportCard';
 import { ATISCard } from '@/components/aviation/ATISCard';
 import { MetarWeatherCard } from '@/components/aviation/MetarWeatherCard';
 import { Skeleton } from '@/components/ui/skeleton';
-import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { openSimBriefPopup, monitorSimBriefPopup, storePendingOFP, clearPendingOFP, SimBriefFormData } from '@/lib/simbrief';
 
 const AIRCRAFT_TYPES = [
   { code: 'A20N', name: 'Airbus A320neo' },
@@ -35,12 +37,13 @@ const AIRCRAFT_TYPES = [
 ];
 
 export default function FlightBriefing() {
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const { ofpData, loading, error, fetchOFP, generateOFP } = useSimBriefOFP();
+  const { toast } = useToast();
+  const { ofpData, loading, error, fetchOFPById, clearOFP } = useSimBriefOFP();
   const [activeTab, setActiveTab] = useState('overview');
   
-  // Manual input form
+  // Form state
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
   const [aircraftType, setAircraftType] = useState('A320');
@@ -48,7 +51,17 @@ export default function FlightBriefing() {
   const [passengers, setPassengers] = useState('');
   const [cargo, setCargo] = useState('');
   
-  const simbriefPid = profile?.simbrief_pid;
+  const [generating, setGenerating] = useState(false);
+  const popupRef = useRef<Window | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (cleanupRef.current) cleanupRef.current();
+      if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
+    };
+  }, []);
 
   if (authLoading) {
     return (
@@ -64,29 +77,83 @@ export default function FlightBriefing() {
     return <Navigate to="/auth" replace />;
   }
 
-  const handleFetchRecentFPL = async () => {
-    if (!simbriefPid) return;
-    await fetchOFP(simbriefPid);
+  const handleGenerateOFP = async () => {
+    if (!origin || !destination) {
+      toast({
+        title: 'Missing Fields',
+        description: 'Please enter origin and destination airports',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setGenerating(true);
+    clearOFP();
+    clearPendingOFP();
+
+    try {
+      const outputPage = `${window.location.origin}/simbrief/callback`;
+      
+      const formData: SimBriefFormData = {
+        orig: origin.toUpperCase(),
+        dest: destination.toUpperCase(),
+        type: aircraftType,
+        airline: 'AFL',
+        fltnum: flightNumber || '001',
+        pax: passengers || undefined,
+        cargo: cargo || undefined,
+      };
+      
+      const { popup, timestamp } = await openSimBriefPopup(formData, outputPage);
+      
+      if (!popup) {
+        throw new Error('Failed to open SimBrief popup. Please disable your pop-up blocker.');
+      }
+      
+      popupRef.current = popup;
+      storePendingOFP({ formData, timestamp });
+      
+      toast({
+        title: 'SimBrief Opened',
+        description: 'Complete the flight plan in the popup.',
+      });
+      
+      cleanupRef.current = monitorSimBriefPopup(
+        popup,
+        formData,
+        timestamp,
+        async (ofpId) => {
+          setGenerating(false);
+          await fetchOFPById(ofpId);
+        },
+        () => {
+          setGenerating(false);
+          toast({
+            title: 'Timeout',
+            description: 'SimBrief took too long to respond',
+            variant: 'destructive',
+          });
+        }
+      );
+      
+    } catch (err) {
+      setGenerating(false);
+      console.error('Error generating OFP:', err);
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to generate flight plan',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleGenerateOFP = async () => {
-    if (!origin || !destination || !aircraftType) return;
-    
-    await generateOFP({
-      airline: 'AFL',
-      fltnum: flightNumber || '001',
-      orig: origin.toUpperCase(),
-      dest: destination.toUpperCase(),
-      type: aircraftType,
-      pax: passengers ? parseInt(passengers) : undefined,
-      cargo: cargo ? parseInt(cargo) : undefined,
-    });
-
-    // After generation, fetch the latest OFP
-    if (simbriefPid) {
-      // Wait a bit for SimBrief to process
-      setTimeout(() => fetchOFP(simbriefPid), 3000);
-    }
+  const handleNewFlightPlan = () => {
+    clearOFP();
+    setOrigin('');
+    setDestination('');
+    setFlightNumber('');
+    setPassengers('');
+    setCargo('');
   };
 
   const formatTime = (seconds: string | null) => {
@@ -110,6 +177,13 @@ export default function FlightBriefing() {
     return `${hrs}h ${mins}m`;
   };
 
+  const parseRunwayHeading = (rwy: string | null): number => {
+    if (!rwy) return 0;
+    const match = rwy.match(/(\d{1,2})/);
+    if (!match) return 0;
+    return parseInt(match[1]) * 10;
+  };
+
   return (
     <DashboardLayout>
       {/* Header */}
@@ -129,30 +203,35 @@ export default function FlightBriefing() {
             </p>
           </div>
         </div>
-        {simbriefPid && (
-          <Button variant="outline" size="sm" onClick={handleFetchRecentFPL} disabled={loading} className="gap-2">
-            <Download className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Fetch Recent FPL
+        {ofpData && (
+          <Button variant="outline" size="sm" onClick={handleNewFlightPlan} className="gap-2">
+            <RefreshCw className="h-4 w-4" />
+            New Flight Plan
           </Button>
         )}
       </div>
 
+      {generating && (
+        <div className="bg-warning/10 border border-warning/30 rounded-xl p-6 mb-6">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-6 w-6 animate-spin text-warning" />
+            <div>
+              <p className="font-semibold text-foreground">Generating Flight Plan...</p>
+              <p className="text-sm text-muted-foreground">
+                Complete the plan in the SimBrief popup.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Manual Input Form */}
-      {!ofpData && (
+      {!ofpData && !generating && (
         <div className="bg-card border border-border rounded-xl p-6 mb-6">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-1 h-6 bg-warning rounded-full" />
             <h3 className="text-lg font-semibold text-foreground">Flight Plan Details</h3>
           </div>
-          
-          {!simbriefPid && (
-            <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 mb-6">
-              <div className="flex items-center gap-2 text-warning">
-                <Info className="h-4 w-4" />
-                <p className="text-sm">Add your SimBrief PID in your profile to use flight planning features.</p>
-              </div>
-            </div>
-          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
             <div className="space-y-2">
@@ -223,22 +302,14 @@ export default function FlightBriefing() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <Button 
-              onClick={handleGenerateOFP} 
-              disabled={!origin || !destination || !simbriefPid || loading}
-              className="gap-2"
-            >
-              <Send className="h-4 w-4" />
-              Generate OFP
-            </Button>
-            {simbriefPid && (
-              <Button variant="outline" onClick={handleFetchRecentFPL} disabled={loading} className="gap-2">
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                Fetch Latest OFP
-              </Button>
-            )}
-          </div>
+          <Button 
+            onClick={handleGenerateOFP} 
+            disabled={!origin || !destination || loading}
+            className="gap-2"
+          >
+            <Send className="h-4 w-4" />
+            Generate OFP
+          </Button>
         </div>
       )}
 
@@ -259,13 +330,6 @@ export default function FlightBriefing() {
         <>
           {/* Flight Summary Header */}
           <div className="bg-gradient-to-r from-card to-muted/50 border border-border rounded-xl p-6 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-foreground">Flight Plan Loaded</h3>
-              <Button variant="ghost" size="sm" onClick={handleFetchRecentFPL} className="gap-2">
-                <RefreshCw className="h-4 w-4" />
-                Refresh
-              </Button>
-            </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
               <div className="bg-muted/50 rounded-lg p-3">
                 <p className="text-xs text-muted-foreground uppercase">Flight</p>
@@ -304,7 +368,6 @@ export default function FlightBriefing() {
             {/* Overview Tab */}
             <TabsContent value="overview" className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Flight Information */}
                 <div className="bg-card border border-border rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-1 h-6 bg-warning rounded-full" />
@@ -321,7 +384,6 @@ export default function FlightBriefing() {
                   </div>
                 </div>
 
-                {/* Performance Data */}
                 <div className="bg-card border border-border rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-1 h-6 bg-warning rounded-full" />
@@ -338,7 +400,6 @@ export default function FlightBriefing() {
                 </div>
               </div>
 
-              {/* ATC Flight Plan */}
               <div className="bg-card border border-border rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-1 h-6 bg-warning rounded-full" />
@@ -363,12 +424,7 @@ export default function FlightBriefing() {
                       <div className="p-2 border-b border-border">
                         <p className="text-sm font-medium text-foreground">{map.name}</p>
                       </div>
-                      <img
-                        src={map.fullUrl}
-                        alt={map.name}
-                        className="w-full h-auto"
-                        loading="lazy"
-                      />
+                      <img src={map.fullUrl} alt={map.name} className="w-full h-auto" loading="lazy" />
                       <div className="p-2">
                         <Button variant="ghost" size="sm" className="w-full" onClick={() => window.open(map.fullUrl, '_blank')}>
                           <ExternalLink className="h-4 w-4 mr-2" />
@@ -418,7 +474,6 @@ export default function FlightBriefing() {
             {/* Fuel & Weights Tab */}
             <TabsContent value="fuel" className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Fuel Planning */}
                 <div className="bg-card border border-border rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-1 h-6 bg-warning rounded-full" />
@@ -438,7 +493,6 @@ export default function FlightBriefing() {
                   </div>
                 </div>
 
-                {/* Weights */}
                 <div className="bg-card border border-border rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-1 h-6 bg-warning rounded-full" />
@@ -470,82 +524,89 @@ export default function FlightBriefing() {
             <TabsContent value="weather" className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <MetarWeatherCard 
+                  metar={ofpData.origin.metar || ''} 
                   icao={ofpData.origin.icao_code}
                   label="Departure"
-                  metar={ofpData.origin.metar}
-                  runwayHeading={ofpData.origin.plan_rwy ? parseInt(ofpData.origin.plan_rwy.replace(/[LRC]/g, '')) * 10 : 0}
+                  runwayHeading={parseRunwayHeading(ofpData.origin.plan_rwy)}
                 />
                 <MetarWeatherCard 
+                  metar={ofpData.destination.metar || ''} 
                   icao={ofpData.destination.icao_code}
                   label="Arrival"
-                  metar={ofpData.destination.metar}
-                  runwayHeading={ofpData.destination.plan_rwy ? parseInt(ofpData.destination.plan_rwy.replace(/[LRC]/g, '')) * 10 : 0}
+                  runwayHeading={parseRunwayHeading(ofpData.destination.plan_rwy)}
                 />
               </div>
-              
-              {/* TAF Section */}
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-card border border-border rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-3">
+                  <div className="flex items-center gap-2 mb-4">
                     <div className="w-1 h-6 bg-warning rounded-full" />
                     <h3 className="text-lg font-semibold text-foreground">Departure TAF - {ofpData.origin.icao_code}</h3>
-                    <FlightCategoryBadge category={ofpData.origin.metar_category} />
                   </div>
-                  <p className="font-mono text-xs text-foreground bg-muted/50 p-3 rounded whitespace-pre-wrap">
+                  <p className="font-mono text-xs text-foreground bg-muted/50 p-2 rounded whitespace-pre-wrap">
                     {ofpData.origin.taf || 'No TAF data'}
                   </p>
+                  <div className="mt-3">
+                    <FlightCategoryBadge category={ofpData.origin.metar_category} />
+                  </div>
                 </div>
+
                 <div className="bg-card border border-border rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-3">
+                  <div className="flex items-center gap-2 mb-4">
                     <div className="w-1 h-6 bg-warning rounded-full" />
                     <h3 className="text-lg font-semibold text-foreground">Arrival TAF - {ofpData.destination.icao_code}</h3>
-                    <FlightCategoryBadge category={ofpData.destination.metar_category} />
                   </div>
-                  <p className="font-mono text-xs text-foreground bg-muted/50 p-3 rounded whitespace-pre-wrap">
+                  <p className="font-mono text-xs text-foreground bg-muted/50 p-2 rounded whitespace-pre-wrap">
                     {ofpData.destination.taf || 'No TAF data'}
                   </p>
+                  <div className="mt-3">
+                    <FlightCategoryBadge category={ofpData.destination.metar_category} />
+                  </div>
                 </div>
               </div>
 
-              {/* Alternate Weather */}
               {ofpData.alternate.icao_code && (
-                <MetarWeatherCard 
-                  icao={ofpData.alternate.icao_code}
-                  label="Alternate"
-                  metar={ofpData.alternate.metar}
-                />
+                <div className="bg-card border border-border rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-1 h-6 bg-warning rounded-full" />
+                    <h3 className="text-lg font-semibold text-foreground">Alternate Weather - {ofpData.alternate.icao_code}</h3>
+                  </div>
+                  <p className="font-mono text-sm text-foreground bg-muted/50 p-2 rounded break-all">
+                    {ofpData.alternate.metar || 'No METAR data'}
+                  </p>
+                </div>
               )}
             </TabsContent>
 
-            {/* Navigation Log Tab */}
+            {/* Nav Log Tab */}
             <TabsContent value="navlog" className="space-y-6">
               <div className="bg-card border border-border rounded-xl p-4 overflow-x-auto">
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-1 h-6 bg-warning rounded-full" />
                   <h3 className="text-lg font-semibold text-foreground">Navigation Log</h3>
                 </div>
-                <table className="w-full min-w-[800px]">
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border text-warning text-xs uppercase">
-                      <th className="text-left p-2">Waypoint</th>
-                      <th className="text-left p-2">Airway</th>
-                      <th className="text-left p-2">Altitude</th>
-                      <th className="text-left p-2">Wind</th>
-                      <th className="text-left p-2">Distance</th>
-                      <th className="text-left p-2">ETE</th>
-                      <th className="text-left p-2">Fuel Rem</th>
+                    <tr className="border-b border-border text-left">
+                      <th className="py-2 px-2 text-muted-foreground font-medium">Waypoint</th>
+                      <th className="py-2 px-2 text-muted-foreground font-medium">Airway</th>
+                      <th className="py-2 px-2 text-muted-foreground font-medium">Alt</th>
+                      <th className="py-2 px-2 text-muted-foreground font-medium">Wind</th>
+                      <th className="py-2 px-2 text-muted-foreground font-medium">Dist</th>
+                      <th className="py-2 px-2 text-muted-foreground font-medium">Time</th>
+                      <th className="py-2 px-2 text-muted-foreground font-medium">Fuel Rem</th>
                     </tr>
                   </thead>
                   <tbody>
                     {ofpData.navlog.map((fix, idx) => (
                       <tr key={idx} className="border-b border-border/50 hover:bg-muted/30">
-                        <td className="p-2 font-semibold text-foreground">{fix.ident}</td>
-                        <td className="p-2 text-muted-foreground">{fix.via_airway || 'DCT'}</td>
-                        <td className="p-2 text-foreground">FL{Math.round(parseInt(fix.altitude_feet || '0') / 100)}</td>
-                        <td className="p-2 text-muted-foreground">{fix.wind_dir}/{fix.wind_spd}</td>
-                        <td className="p-2 text-foreground">{fix.distance} NM</td>
-                        <td className="p-2 text-muted-foreground">{formatLegTime(fix.time_total)}</td>
-                        <td className="p-2 text-foreground">{parseInt(fix.fuel_plan_onboard || '0').toLocaleString()}</td>
+                        <td className="py-2 px-2 font-mono font-medium text-foreground">{fix.ident}</td>
+                        <td className="py-2 px-2 text-muted-foreground">{fix.via_airway || 'DCT'}</td>
+                        <td className="py-2 px-2 text-foreground">FL{Math.round(parseInt(fix.altitude_feet) / 100)}</td>
+                        <td className="py-2 px-2 text-foreground">{fix.wind_dir}°/{fix.wind_spd}kt</td>
+                        <td className="py-2 px-2 text-foreground">{fix.distance}nm</td>
+                        <td className="py-2 px-2 text-foreground">{formatLegTime(fix.time_total)}</td>
+                        <td className="py-2 px-2 text-foreground">{formatWeight(fix.fuel_plan_onboard)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -560,13 +621,11 @@ export default function FlightBriefing() {
                 <IFAirportCard icao={ofpData.destination.icao_code} label="Arrival" />
               </div>
               {ofpData.alternate.icao_code && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <IFAirportCard icao={ofpData.alternate.icao_code} label="Alternate" />
-                </div>
+                <IFAirportCard icao={ofpData.alternate.icao_code} label="Alternate" />
               )}
             </TabsContent>
 
-            {/* Live ATIS Tab */}
+            {/* ATIS Tab */}
             <TabsContent value="atis" className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <ATISCard icao={ofpData.origin.icao_code} label="Departure" />
@@ -574,29 +633,18 @@ export default function FlightBriefing() {
               </div>
             </TabsContent>
           </Tabs>
-
-          {/* Action Buttons */}
-          <div className="mt-6 flex flex-wrap gap-4 justify-between items-center">
-            <Button variant="outline" onClick={() => navigate('/dispatch')}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Return to Dispatch
-            </Button>
-            <Button onClick={() => navigate('/pirep')} className="gap-2">
-              <Plane className="h-4 w-4" />
-              Proceed to File PIREP
-            </Button>
-          </div>
         </>
       )}
     </DashboardLayout>
   );
 }
 
+// Helper Components
 function DataRow({ label, value, highlight, muted }: { label: string; value: string; highlight?: boolean; muted?: boolean }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-muted-foreground text-sm">{label}</span>
-      <span className={`font-semibold ${highlight ? 'text-warning text-lg' : muted ? 'text-muted-foreground text-xs' : 'text-foreground'}`}>
+    <div className="flex justify-between items-center">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className={`font-medium ${highlight ? 'text-warning' : muted ? 'text-muted-foreground' : 'text-foreground'}`}>
         {value}
       </span>
     </div>
@@ -605,8 +653,8 @@ function DataRow({ label, value, highlight, muted }: { label: string; value: str
 
 function DataBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-muted/50 rounded-lg p-3">
-      <p className="text-xs text-muted-foreground uppercase mb-1">{label}</p>
+    <div className="bg-muted/50 rounded-lg p-3 text-center">
+      <p className="text-xs text-muted-foreground mb-1">{label}</p>
       <p className="font-semibold text-foreground">{value}</p>
     </div>
   );
@@ -614,15 +662,15 @@ function DataBox({ label, value }: { label: string; value: string }) {
 
 function FlightCategoryBadge({ category }: { category: string }) {
   const colors: Record<string, string> = {
-    vfr: 'bg-success/20 text-success border-success',
-    mvfr: 'bg-info/20 text-info border-info',
-    ifr: 'bg-warning/20 text-warning border-warning',
-    lifr: 'bg-destructive/20 text-destructive border-destructive',
+    VFR: 'bg-success text-success-foreground',
+    MVFR: 'bg-blue-500 text-white',
+    IFR: 'bg-destructive text-destructive-foreground',
+    LIFR: 'bg-purple-600 text-white',
   };
-
+  const color = colors[category?.toUpperCase()] || 'bg-muted text-muted-foreground';
   return (
-    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold uppercase border ${colors[category] || 'bg-muted text-muted-foreground border-border'}`}>
-      {category || 'Unknown'}
-    </span>
+    <Badge className={color}>
+      Flight Category: {category?.toUpperCase() || 'UNKNOWN'}
+    </Badge>
   );
 }

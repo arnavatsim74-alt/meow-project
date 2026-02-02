@@ -21,6 +21,7 @@ import PendingApproval from "./pages/PendingApproval";
 import Notams from "./pages/Notams";
 import AeronauticalCharts from "./pages/AeronauticalCharts";
 import NotFound from "./pages/NotFound";
+import SimBriefCallback from "./pages/SimBriefCallback";
 
 const queryClient = new QueryClient();
 
@@ -49,6 +50,7 @@ const App = () => (
             <Route path="/notams" element={<Notams />} />
             <Route path="/charts" element={<AeronauticalCharts />} />
             <Route path="/type-ratings" element={<Dashboard />} />
+            <Route path="/simbrief/callback" element={<SimBriefCallback />} />
             <Route path="/admin" element={<AdminPanel />} />
             <Route path="/admin/*" element={<AdminPanel />} />
             <Route path="*" element={<NotFound />} />
