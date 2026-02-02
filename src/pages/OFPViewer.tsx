@@ -8,23 +8,28 @@ import { useAuth } from '@/hooks/useAuth';
 import { useSimBriefOFP, OFPData } from '@/hooks/useSimBriefOFP';
 import { IFAirportCard } from '@/components/aviation/IFAirportCard';
 import { ATISCard } from '@/components/aviation/ATISCard';
+import { MetarWeatherCard } from '@/components/aviation/MetarWeatherCard';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import { clearPendingOFP } from '@/lib/simbrief';
 
 export default function OFPViewer() {
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { ofpData, loading, error, fetchOFP } = useSimBriefOFP();
+  const { ofpData, loading, error, fetchOFPById } = useSimBriefOFP();
   const [activeTab, setActiveTab] = useState('overview');
 
+  const ofpId = searchParams.get('ofp_id');
   const legId = searchParams.get('legId') || '';
-  const simbriefPid = profile?.simbrief_pid;
 
   useEffect(() => {
-    if (simbriefPid && !ofpData && !loading) {
-      fetchOFP(simbriefPid);
+    if (ofpId && !ofpData && !loading) {
+      console.log('Fetching OFP by ID:', ofpId);
+      fetchOFPById(ofpId);
+      clearPendingOFP();
     }
-  }, [simbriefPid, ofpData, loading, fetchOFP]);
+  }, [ofpId, ofpData, loading, fetchOFPById]);
 
   if (authLoading) {
     return (
@@ -40,18 +45,18 @@ export default function OFPViewer() {
     return <Navigate to="/auth" replace />;
   }
 
-  if (!simbriefPid) {
+  if (!ofpId) {
     return (
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center h-64 gap-4">
           <Info className="h-12 w-12 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">SimBrief PID Required</h2>
+          <h2 className="text-lg font-semibold">No OFP Selected</h2>
           <p className="text-muted-foreground text-center max-w-md">
-            Please add your SimBrief Pilot ID in your profile settings to view OFP data.
+            Generate a flight plan first to view your Operational Flight Plan.
           </p>
-          <Button variant="outline" onClick={() => navigate('/dispatch')}>
+          <Button variant="outline" onClick={() => navigate('/simbrief')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Dispatch
+            Go to OFP Generator
           </Button>
         </div>
       </DashboardLayout>
@@ -71,14 +76,36 @@ export default function OFPViewer() {
     return `${parseInt(kg).toLocaleString()} kg`;
   };
 
+  const formatLegTime = (seconds: string): string => {
+    if (!seconds) return '0h 0m';
+    const totalMins = parseInt(seconds) / 60;
+    const hrs = Math.floor(totalMins / 60);
+    const mins = Math.round(totalMins % 60);
+    return `${hrs}h ${mins}m`;
+  };
+
+  const handleRefresh = () => {
+    if (ofpId) {
+      fetchOFPById(ofpId);
+    }
+  };
+
+  // Parse runway string to heading (e.g., "24L" -> 240)
+  const parseRunwayHeading = (rwy: string | null): number => {
+    if (!rwy) return 0;
+    const match = rwy.match(/(\d{1,2})/);
+    if (!match) return 0;
+    return parseInt(match[1]) * 10;
+  };
+
   return (
     <DashboardLayout>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="sm" onClick={() => navigate('/dispatch')} className="gap-2">
+          <Button variant="outline" size="sm" onClick={() => navigate('/simbrief')} className="gap-2">
             <ArrowLeft className="h-4 w-4" />
-            Back to Dispatch
+            New OFP
           </Button>
           {ofpData && (
             <div>
@@ -92,7 +119,7 @@ export default function OFPViewer() {
             </div>
           )}
         </div>
-        <Button variant="outline" size="sm" onClick={() => fetchOFP(simbriefPid)} disabled={loading} className="gap-2">
+        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading} className="gap-2">
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
@@ -108,6 +135,9 @@ export default function OFPViewer() {
       {error && (
         <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 text-destructive">
           {error}
+          <Button variant="outline" size="sm" className="ml-4" onClick={handleRefresh}>
+            Retry
+          </Button>
         </div>
       )}
 
@@ -146,8 +176,8 @@ export default function OFPViewer() {
               <TabsTrigger value="fuel" className="text-xs">Fuel & Weights</TabsTrigger>
               <TabsTrigger value="weather" className="text-xs">Weather</TabsTrigger>
               <TabsTrigger value="navlog" className="text-xs">Nav Log</TabsTrigger>
-              <TabsTrigger value="info" className="text-xs">Special Info</TabsTrigger>
-              <TabsTrigger value="charts" className="text-xs">Charts</TabsTrigger>
+              <TabsTrigger value="airports" className="text-xs">Airports</TabsTrigger>
+              <TabsTrigger value="atis" className="text-xs">Live ATIS</TabsTrigger>
             </TabsList>
 
             {/* Overview Tab */}
@@ -187,16 +217,15 @@ export default function OFPViewer() {
                 </div>
               </div>
 
-              {/* Airport Info from Infinite Flight */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <IFAirportCard icao={ofpData.origin.icao_code} label="Departure" />
-                <IFAirportCard icao={ofpData.destination.icao_code} label="Arrival" />
-              </div>
-
-              {/* ATIS Cards */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <ATISCard icao={ofpData.origin.icao_code} label="Departure" />
-                <ATISCard icao={ofpData.destination.icao_code} label="Arrival" />
+              {/* ATC Flight Plan */}
+              <div className="bg-card border border-border rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-1 h-6 bg-warning rounded-full" />
+                  <h3 className="text-lg font-semibold text-foreground">ATC Flight Plan</h3>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-4 font-mono text-xs break-all whitespace-pre-wrap">
+                  {ofpData.atc.flightplan_text || 'No ATC flight plan data'}
+                </div>
               </div>
             </TabsContent>
 
@@ -318,20 +347,30 @@ export default function OFPViewer() {
 
             {/* Weather Tab */}
             <TabsContent value="weather" className="space-y-6">
+              {/* Wind Compass Cards */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Departure Weather */}
+                <MetarWeatherCard 
+                  metar={ofpData.origin.metar || ''} 
+                  icao={ofpData.origin.icao_code}
+                  label="Departure"
+                  runwayHeading={parseRunwayHeading(ofpData.origin.plan_rwy)}
+                />
+                <MetarWeatherCard 
+                  metar={ofpData.destination.metar || ''} 
+                  icao={ofpData.destination.icao_code}
+                  label="Arrival"
+                  runwayHeading={parseRunwayHeading(ofpData.destination.plan_rwy)}
+                />
+              </div>
+
+              {/* Full METAR/TAF */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-card border border-border rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-1 h-6 bg-warning rounded-full" />
                     <h3 className="text-lg font-semibold text-foreground">Departure Weather - {ofpData.origin.icao_code}</h3>
                   </div>
                   <div className="space-y-4">
-                    <div>
-                      <p className="text-xs text-warning font-semibold mb-1">METAR</p>
-                      <p className="font-mono text-sm text-foreground bg-muted/50 p-2 rounded break-all">
-                        {ofpData.origin.metar || 'No METAR data'}
-                      </p>
-                    </div>
                     <div>
                       <p className="text-xs text-warning font-semibold mb-1">TAF</p>
                       <p className="font-mono text-xs text-foreground bg-muted/50 p-2 rounded whitespace-pre-wrap">
@@ -342,19 +381,12 @@ export default function OFPViewer() {
                   </div>
                 </div>
 
-                {/* Destination Weather */}
                 <div className="bg-card border border-border rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-1 h-6 bg-warning rounded-full" />
                     <h3 className="text-lg font-semibold text-foreground">Arrival Weather - {ofpData.destination.icao_code}</h3>
                   </div>
                   <div className="space-y-4">
-                    <div>
-                      <p className="text-xs text-warning font-semibold mb-1">METAR</p>
-                      <p className="font-mono text-sm text-foreground bg-muted/50 p-2 rounded break-all">
-                        {ofpData.destination.metar || 'No METAR data'}
-                      </p>
-                    </div>
                     <div>
                       <p className="text-xs text-warning font-semibold mb-1">TAF</p>
                       <p className="font-mono text-xs text-foreground bg-muted/50 p-2 rounded whitespace-pre-wrap">
@@ -383,35 +415,35 @@ export default function OFPViewer() {
               )}
             </TabsContent>
 
-            {/* Navigation Log Tab */}
+            {/* Nav Log Tab */}
             <TabsContent value="navlog" className="space-y-6">
               <div className="bg-card border border-border rounded-xl p-4 overflow-x-auto">
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-1 h-6 bg-warning rounded-full" />
                   <h3 className="text-lg font-semibold text-foreground">Navigation Log</h3>
                 </div>
-                <table className="w-full min-w-[800px]">
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border text-warning text-xs uppercase">
-                      <th className="text-left p-2">Waypoint</th>
-                      <th className="text-left p-2">Airway</th>
-                      <th className="text-left p-2">Altitude</th>
-                      <th className="text-left p-2">Wind</th>
-                      <th className="text-left p-2">Distance</th>
-                      <th className="text-left p-2">ETE</th>
-                      <th className="text-left p-2">Fuel Rem</th>
+                    <tr className="border-b border-border text-left">
+                      <th className="py-2 px-2 text-muted-foreground font-medium">Waypoint</th>
+                      <th className="py-2 px-2 text-muted-foreground font-medium">Airway</th>
+                      <th className="py-2 px-2 text-muted-foreground font-medium">Alt</th>
+                      <th className="py-2 px-2 text-muted-foreground font-medium">Wind</th>
+                      <th className="py-2 px-2 text-muted-foreground font-medium">Dist</th>
+                      <th className="py-2 px-2 text-muted-foreground font-medium">Time</th>
+                      <th className="py-2 px-2 text-muted-foreground font-medium">Fuel Rem</th>
                     </tr>
                   </thead>
                   <tbody>
                     {ofpData.navlog.map((fix, idx) => (
                       <tr key={idx} className="border-b border-border/50 hover:bg-muted/30">
-                        <td className="p-2 font-semibold text-foreground">{fix.ident}</td>
-                        <td className="p-2 text-muted-foreground">{fix.via_airway || 'DCT'}</td>
-                        <td className="p-2 text-foreground">FL{Math.round(parseInt(fix.altitude_feet || '0') / 100)}</td>
-                        <td className="p-2 text-muted-foreground">{fix.wind_dir}/{fix.wind_spd}</td>
-                        <td className="p-2 text-foreground">{fix.distance} NM</td>
-                        <td className="p-2 text-muted-foreground">{formatLegTime(fix.time_total)}</td>
-                        <td className="p-2 text-foreground">{parseInt(fix.fuel_plan_onboard || '0').toLocaleString()}</td>
+                        <td className="py-2 px-2 font-mono font-medium text-foreground">{fix.ident}</td>
+                        <td className="py-2 px-2 text-muted-foreground">{fix.via_airway || 'DCT'}</td>
+                        <td className="py-2 px-2 text-foreground">FL{Math.round(parseInt(fix.altitude_feet) / 100)}</td>
+                        <td className="py-2 px-2 text-foreground">{fix.wind_dir}°/{fix.wind_spd}kt</td>
+                        <td className="py-2 px-2 text-foreground">{fix.distance}nm</td>
+                        <td className="py-2 px-2 text-foreground">{formatLegTime(fix.time_total)}</td>
+                        <td className="py-2 px-2 text-foreground">{formatWeight(fix.fuel_plan_onboard)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -419,80 +451,37 @@ export default function OFPViewer() {
               </div>
             </TabsContent>
 
-            {/* Special Info Tab */}
-            <TabsContent value="info" className="space-y-6">
-              <div className="bg-card border border-border rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-1 h-6 bg-warning rounded-full" />
-                  <h3 className="text-lg font-semibold text-foreground">Special Information & Notices</h3>
-                </div>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Important notices, special passenger information, equipment advisories, and occasion greetings for this flight.
-                </p>
-                <div className="bg-muted/30 rounded-lg p-4 border-l-4 border-warning">
-                  <p className="text-sm text-foreground">
-                    No special notices for this flight.
-                  </p>
-                </div>
+            {/* Airports Tab */}
+            <TabsContent value="airports" className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <IFAirportCard icao={ofpData.origin.icao_code} label="Departure" />
+                <IFAirportCard icao={ofpData.destination.icao_code} label="Arrival" />
               </div>
-
-              <div className="bg-card border border-border rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-1 h-6 bg-warning rounded-full" />
-                  <h3 className="text-lg font-semibold text-foreground">ATC Flight Plan</h3>
-                </div>
-                <div className="bg-muted/50 rounded-lg p-4 font-mono text-xs break-all whitespace-pre-wrap">
-                  {ofpData.atc.flightplan_text || 'No ATC flight plan data'}
-                </div>
-              </div>
+              {ofpData.alternate.icao_code && (
+                <IFAirportCard icao={ofpData.alternate.icao_code} label="Alternate" />
+              )}
             </TabsContent>
 
-            {/* Charts Tab */}
-            <TabsContent value="charts" className="space-y-6">
-              <div className="bg-card border border-border rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-1 h-6 bg-warning rounded-full" />
-                  <h3 className="text-lg font-semibold text-foreground">Available Charts</h3>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {ofpData.images.maps.map((map, idx) => (
-                    <Button
-                      key={idx}
-                      variant="outline"
-                      className="h-auto py-4 flex-col gap-2"
-                      onClick={() => window.open(map.fullUrl, '_blank')}
-                    >
-                      <FileText className="h-6 w-6" />
-                      <span className="text-xs">{map.name}</span>
-                    </Button>
-                  ))}
-                </div>
+            {/* ATIS Tab */}
+            <TabsContent value="atis" className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <ATISCard icao={ofpData.origin.icao_code} label="Departure" />
+                <ATISCard icao={ofpData.destination.icao_code} label="Arrival" />
               </div>
             </TabsContent>
           </Tabs>
-
-          {/* Action Buttons */}
-          <div className="mt-6 flex flex-wrap gap-4 justify-between items-center">
-            <Button variant="outline" onClick={() => navigate('/dispatch')}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Return to Dispatch
-            </Button>
-            <Button onClick={() => navigate(`/pirep?leg=${legId}`)} className="gap-2">
-              <Plane className="h-4 w-4" />
-              Proceed to File PIREP
-            </Button>
-          </div>
         </>
       )}
     </DashboardLayout>
   );
 }
 
+// Helper Components
 function DataRow({ label, value, highlight, muted }: { label: string; value: string; highlight?: boolean; muted?: boolean }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-muted-foreground text-sm">{label}</span>
-      <span className={`font-semibold ${highlight ? 'text-warning text-lg' : muted ? 'text-muted-foreground text-xs' : 'text-foreground'}`}>
+    <div className="flex justify-between items-center">
+      <span className={`text-sm ${muted ? 'text-muted-foreground' : 'text-muted-foreground'}`}>{label}</span>
+      <span className={`font-medium ${highlight ? 'text-warning' : muted ? 'text-muted-foreground' : 'text-foreground'}`}>
         {value}
       </span>
     </div>
@@ -501,8 +490,8 @@ function DataRow({ label, value, highlight, muted }: { label: string; value: str
 
 function DataBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-muted/50 rounded-lg p-3">
-      <p className="text-xs text-muted-foreground uppercase mb-1">{label}</p>
+    <div className="bg-muted/50 rounded-lg p-3 text-center">
+      <p className="text-xs text-muted-foreground mb-1">{label}</p>
       <p className="font-semibold text-foreground">{value}</p>
     </div>
   );
@@ -510,23 +499,17 @@ function DataBox({ label, value }: { label: string; value: string }) {
 
 function FlightCategoryBadge({ category }: { category: string }) {
   const colors: Record<string, string> = {
-    vfr: 'bg-success/20 text-success border-success',
-    mvfr: 'bg-info/20 text-info border-info',
-    ifr: 'bg-warning/20 text-warning border-warning',
-    lifr: 'bg-destructive/20 text-destructive border-destructive',
+    VFR: 'bg-success text-success-foreground',
+    MVFR: 'bg-blue-500 text-white',
+    IFR: 'bg-destructive text-destructive-foreground',
+    LIFR: 'bg-purple-600 text-white',
   };
-
+  
+  const color = colors[category?.toUpperCase()] || 'bg-muted text-muted-foreground';
+  
   return (
-    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold uppercase border ${colors[category] || 'bg-muted text-muted-foreground border-border'}`}>
-      {category || 'Unknown'}
-    </span>
+    <Badge className={color}>
+      Flight Category: {category?.toUpperCase() || 'UNKNOWN'}
+    </Badge>
   );
-}
-
-function formatLegTime(seconds: string): string {
-  if (!seconds) return '0h 0m';
-  const totalMins = parseInt(seconds) / 60;
-  const hrs = Math.floor(totalMins / 60);
-  const mins = Math.round(totalMins % 60);
-  return `${hrs}h ${mins}m`;
 }
