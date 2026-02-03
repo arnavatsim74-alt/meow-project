@@ -32,7 +32,7 @@ const AIRCRAFT_TYPES = [
 ];
 
 export default function SimBriefDispatch() {
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
@@ -136,13 +136,14 @@ export default function SimBriefDispatch() {
         description: 'Complete the flight plan in the popup. You will be redirected when done.',
       });
       
-      // Monitor popup - when it closes, redirect to viewer with ofp_id
+      // Monitor popup - when it closes, redirect to OFP Viewer with ofp_id
       cleanupRef.current = monitorSimBriefPopup(
         popup,
         formData,
         timestamp,
         (ofpId) => {
           setGenerating(false);
+          // Navigate to OFP Viewer with the ofp_id
           navigate(`/ofp?ofp_id=${ofpId}${legId ? `&legId=${legId}` : ''}`);
         },
         () => {
