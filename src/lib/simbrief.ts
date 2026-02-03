@@ -20,6 +20,7 @@ export interface SimBriefFormData {
   planformat?: string;
   cargo?: string;
   pax?: string;
+  route?: string;
 }
 
 export interface PendingOFP {
@@ -33,7 +34,7 @@ export function storePendingOFP(data: PendingOFP): void {
   sessionStorage.setItem('pending_ofp', JSON.stringify(data));
 }
 
-// Retrieve and clear pending OFP data
+// Retrieve pending OFP data
 export function getPendingOFP(): PendingOFP | null {
   const data = sessionStorage.getItem('pending_ofp');
   if (!data) return null;
@@ -44,15 +45,14 @@ export function getPendingOFP(): PendingOFP | null {
   }
 }
 
+// Clear pending OFP data
 export function clearPendingOFP(): void {
   sessionStorage.removeItem('pending_ofp');
   sessionStorage.removeItem('simbrief_ofp_id');
 }
 
-// Calculate expected OFP ID based on form params and timestamp
+// Calculate expected OFP ID based on form params and timestamp (fallback)
 export function calculateOfpId(formData: SimBriefFormData, timestamp: number): string {
-  // SimBrief ofp_id format: {timestamp}_{10_char_hex_based_on_params}
-  // We'll use the timestamp and a derived suffix
   const suffix = formData.orig.toUpperCase() + formData.dest.toUpperCase();
   const hash = suffix.split('').reduce((acc, char) => {
     return ((acc << 5) - acc + char.charCodeAt(0)) & 0xFFFFFFFF;
@@ -113,6 +113,7 @@ export async function openSimBriefPopup(
   if (formData.planformat) params.set('planformat', formData.planformat);
   if (formData.cargo) params.set('cargo', formData.cargo);
   if (formData.pax) params.set('pax', formData.pax);
+  if (formData.route) params.set('route', formData.route);
 
   simbriefUrl.search = params.toString();
   
@@ -147,7 +148,7 @@ export function monitorSimBriefPopup(
       if (ofpId) {
         onComplete(ofpId);
       } else {
-        // No ofp_id but popup closed - calculate expected ID
+        // No ofp_id but popup closed - calculate expected ID as fallback
         const calculatedId = calculateOfpId(formData, timestamp);
         onComplete(calculatedId);
       }

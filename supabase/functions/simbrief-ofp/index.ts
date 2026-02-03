@@ -6,16 +6,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// MD5 hash function for API code generation
+// MD5 hash function for API code generation using std/crypto which supports MD5
 async function md5(message: string): Promise<string> {
   const msgUint8 = new TextEncoder().encode(message);
   const hashBuffer = await stdCrypto.subtle.digest('MD5', msgUint8);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  return hashHex;
+  return hashHex; // Return full MD5 hash (32 chars lowercase)
 }
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -31,18 +32,19 @@ serve(async (req) => {
       );
     }
 
+    // Parse request body for POST requests
     let body: Record<string, unknown> = {};
     if (req.method === 'POST') {
       try {
         body = await req.json();
       } catch {
-        // Body might be empty
+        // Body might be empty for some requests
       }
     }
 
     const action = body.action as string;
 
-    // Generate API code for SimBrief popup authentication
+    // Handle API code generation
     if (action === 'generate_api_code') {
       const orig = (body.orig as string || '').toUpperCase();
       const dest = (body.dest as string || '').toUpperCase();
@@ -69,7 +71,7 @@ serve(async (req) => {
       );
     }
 
-    // Fetch OFP by ofp_id (returned from SimBrief popup callback)
+    // Handle OFP fetch by ofp_id
     if (action === 'fetch_ofp') {
       const ofpId = body.ofp_id as string;
 
@@ -87,7 +89,6 @@ serve(async (req) => {
         const response = await fetch(xmlUrl, {
           headers: { 'User-Agent': 'AFLV-Operations/1.0' }
         });
-
         if (!response.ok) {
           console.error('OFP not found:', response.status);
           return new Response(
@@ -116,7 +117,7 @@ serve(async (req) => {
       }
     }
 
-    // Fetch latest OFP by SimBrief pilot ID/username (legacy support)
+    // Handle fetch by pilot ID (SimBrief username)
     if (action === 'fetch_by_pid') {
       const pid = body.pid as string;
 
@@ -134,7 +135,6 @@ serve(async (req) => {
         const response = await fetch(jsonUrl, {
           headers: { 'User-Agent': 'AFLV-Operations/1.0' }
         });
-
         if (!response.ok) {
           console.error('Failed to fetch by PID:', response.status);
           return new Response(
