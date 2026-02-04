@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 const pilotNavItems = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
   { icon: Plane, label: 'Flight Dispatch', href: '/dispatch' },
-  { icon: FileText, label: 'Flight Briefing', href: '/flight-briefing' },
+  { icon: FileText, label: 'OFP Generator', href: '/simbrief' },
   { icon: FileText, label: 'Submit PIREP', href: '/pirep' },
   { icon: BookOpen, label: 'My PIREPs', href: '/my-pireps' },
   { icon: Plane, label: 'Virtual Fleet', href: '/fleet' },

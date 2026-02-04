@@ -9,7 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import Dispatch from "./pages/Dispatch";
 import SimBriefDispatch from "./pages/SimBriefDispatch";
 import OFPViewer from "./pages/OFPViewer";
-import FlightBriefing from "./pages/FlightBriefing";
+
 import SubmitPirep from "./pages/SubmitPirep";
 import MyPireps from "./pages/MyPireps";
 import Fleet from "./pages/Fleet";
@@ -40,7 +40,7 @@ const App = () => (
             <Route path="/dispatch" element={<Dispatch />} />
             <Route path="/simbrief" element={<SimBriefDispatch />} />
             <Route path="/ofp" element={<OFPViewer />} />
-            <Route path="/flight-briefing" element={<FlightBriefing />} />
+            
             <Route path="/pirep" element={<SubmitPirep />} />
             <Route path="/my-pireps" element={<MyPireps />} />
             <Route path="/fleet" element={<Fleet />} />

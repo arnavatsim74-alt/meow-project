@@ -117,50 +117,8 @@ serve(async (req) => {
       }
     }
 
-    // Handle fetch by pilot ID (SimBrief username)
-    if (action === 'fetch_by_pid') {
-      const pid = body.pid as string;
-
-      if (!pid) {
-        return new Response(
-          JSON.stringify({ error: 'Missing pid parameter' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      console.log('Fetching latest OFP for pilot:', pid);
-      const jsonUrl = `https://www.simbrief.com/api/xml.fetcher.php?username=${pid}&json=1`;
-
-      try {
-        const response = await fetch(jsonUrl, {
-          headers: { 'User-Agent': 'AFLV-Operations/1.0' }
-        });
-        if (!response.ok) {
-          console.error('Failed to fetch by PID:', response.status);
-          return new Response(
-            JSON.stringify({ error: 'Failed to fetch OFP by pilot ID' }),
-            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        const jsonData = await response.json();
-        console.log('Fetched OFP by PID successfully');
-
-        return new Response(
-          JSON.stringify(jsonData),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      } catch (e) {
-        console.error('Error fetching by PID:', e);
-        return new Response(
-          JSON.stringify({ error: 'Failed to fetch OFP data' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-    }
-
     return new Response(
-      JSON.stringify({ error: 'Invalid action. Use: generate_api_code, fetch_ofp, or fetch_by_pid' }),
+      JSON.stringify({ error: 'Invalid action. Use: generate_api_code or fetch_ofp' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

@@ -51,12 +51,16 @@ export function clearPendingOFP(): void {
   sessionStorage.removeItem('simbrief_ofp_id');
 }
 
-// Calculate expected OFP ID based on form params and timestamp (fallback)
-export function calculateOfpId(formData: SimBriefFormData, timestamp: number): string {
-  const suffix = formData.orig.toUpperCase() + formData.dest.toUpperCase();
-  const hash = suffix.split('').reduce((acc, char) => {
-    return ((acc << 5) - acc + char.charCodeAt(0)) & 0xFFFFFFFF;
-  }, 0);
+// Calculate OFP ID based on form params and timestamp
+// SimBrief format: {timestamp}_{MD5(orig+dest+type)[:10].toUpperCase()}
+export function calculateOfpId(timestamp: number, orig: string, dest: string, type: string): string {
+  // Simple hash for suffix - matches SimBrief's format
+  const suffix = (orig + dest + type).toUpperCase();
+  let hash = 0;
+  for (let i = 0; i < suffix.length; i++) {
+    const char = suffix.charCodeAt(i);
+    hash = ((hash << 5) - hash + char) & 0xFFFFFFFF;
+  }
   const hexSuffix = Math.abs(hash).toString(16).toUpperCase().padStart(10, '0').slice(0, 10);
   return `${timestamp}_${hexSuffix}`;
 }
@@ -68,15 +72,18 @@ export async function openSimBriefPopup(
 ): Promise<{ popup: Window | null; timestamp: number }> {
   const timestamp = Math.floor(Date.now() / 1000);
   
+  // Remove protocol from outputPage for the API call
+  const outputPageClean = outputPage.replace(/^https?:\/\//, '');
+  
   // Get API code from backend
-  const { data, error } = await supabase.functions.invoke('simbrief-ofp', {
+  const { data, error } = await supabase.functions.invoke('simbrief-api', {
     body: {
       action: 'generate_api_code',
       orig: formData.orig,
       dest: formData.dest,
       type: formData.type,
       timestamp,
-      outputpage: outputPage,
+      outputpage: outputPageClean,
     },
   });
 
@@ -86,7 +93,7 @@ export async function openSimBriefPopup(
   }
 
   // Build SimBrief URL with all parameters
-  const simbriefUrl = new URL('https://www.simbrief.com/system/dispatch.php');
+  const simbriefUrl = new URL('https://www.simbrief.com/ofp/ofp.loader.api.php');
   const params = new URLSearchParams();
   
   // Required params
@@ -94,6 +101,7 @@ export async function openSimBriefPopup(
   params.set('dest', formData.dest.toUpperCase());
   params.set('type', formData.type);
   params.set('apicode', data.api_code);
+  params.set('timestamp', timestamp.toString());
   params.set('outputpage', outputPage);
   
   // Optional params
@@ -116,6 +124,8 @@ export async function openSimBriefPopup(
   if (formData.route) params.set('route', formData.route);
 
   simbriefUrl.search = params.toString();
+  
+  console.log('Opening SimBrief popup:', simbriefUrl.toString());
   
   // Open popup
   const popup = window.open(
@@ -146,10 +156,11 @@ export function monitorSimBriefPopup(
       // Check if we got an ofp_id from the callback
       const ofpId = sessionStorage.getItem('simbrief_ofp_id');
       if (ofpId) {
+        sessionStorage.removeItem('simbrief_ofp_id');
         onComplete(ofpId);
       } else {
         // No ofp_id but popup closed - calculate expected ID as fallback
-        const calculatedId = calculateOfpId(formData, timestamp);
+        const calculatedId = calculateOfpId(timestamp, formData.orig, formData.dest, formData.type);
         onComplete(calculatedId);
       }
       return;
