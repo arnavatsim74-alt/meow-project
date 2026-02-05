@@ -167,6 +167,23 @@ export default function SubmitPirep() {
           .eq('id', legId);
       }
       
+      // Get the inserted PIREP ID and send to Discord
+      const { data: insertedPirep } = await supabase
+        .from('pireps')
+        .select('id')
+        .eq('user_id', user!.id)
+        .eq('flight_number', flightNumber.toUpperCase())
+        .order('submitted_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (insertedPirep?.id) {
+        // Fire and forget - don't block the UI
+        supabase.functions.invoke('discord-pirep-webhook', {
+          body: { pirep_id: insertedPirep.id }
+        }).catch(err => console.error('Discord webhook error:', err));
+      }
+
       toast.success('PIREP submitted successfully! Awaiting admin review.');
       navigate('/dispatch');
     }

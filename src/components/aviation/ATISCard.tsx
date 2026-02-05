@@ -43,9 +43,9 @@ export function ATISCard({ icao, label }: ATISCardProps) {
     );
   }
 
-  // Extract ATIS text - atis can be an object with an 'atis' string field or null
-  const atisText = data?.atis && typeof data.atis === 'object' && 'atis' in data.atis 
-    ? data.atis.atis 
+  // Extract ATIS text - data.atis is an ATISData object with an 'atis' string field
+  const atisText = data?.atis && typeof data.atis === 'object' && 'atis' in data.atis
+    ? (data.atis as { atis?: string }).atis
     : null;
   const hasATIS = atisText && typeof atisText === 'string' && atisText.trim().length > 0;
 

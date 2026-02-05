@@ -1,11 +1,22 @@
 import { MapPin, Plane, Radio, Navigation, Building2, AlertTriangle } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle } from 'lucide-react';
 import { useInfiniteFlightAirport, getCountryName } from '@/hooks/useInfiniteFlightAirport';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 
 interface IFAirportCardProps {
   icao: string;
   label: 'Departure' | 'Arrival' | 'Alternate';
 }
+
+const classNames: Record<number, string> = {
+  0: 'Unknown',
+  1: 'Alpha',
+  2: 'Bravo',
+  3: 'Charlie',
+  4: 'Delta',
+  5: 'Echo',
+};
 
 const surfaceTypes: Record<number, string> = {
   0: 'Concrete',
@@ -116,6 +127,37 @@ export function IFAirportCard({ icao, label }: IFAirportCardProps) {
           </div>
         </div>
 
+        {/* Airport Class & Timezone */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
+              <Building2 className="h-3 w-3" /> Class
+            </p>
+            <p className="font-semibold text-foreground">
+              {classNames[airportData.class] || `Class ${airportData.class}`}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
+              <Clock className="h-3 w-3" /> Timezone
+            </p>
+            <p className="font-semibold text-foreground text-xs">
+              {airportData.timezone || 'Unknown'}
+            </p>
+          </div>
+        </div>
+
+        {/* Airport Features */}
+        <div className="pt-2 border-t border-border">
+          <p className="text-xs text-muted-foreground mb-2">Airport Features</p>
+          <div className="flex flex-wrap gap-2">
+            <FeatureBadge label="3D Buildings" enabled={airportData.has3dBuildings} />
+            <FeatureBadge label="Jetbridges" enabled={airportData.hasJetbridges} />
+            <FeatureBadge label="Safedock" enabled={airportData.hasSafedockUnits} />
+            <FeatureBadge label="Taxi Routing" enabled={airportData.hasTaxiwayRouting} />
+          </div>
+        </div>
+
         {/* Runways */}
         {airportData.runways && airportData.runways.length > 0 && (
           <div className="pt-2 border-t border-border">
@@ -157,5 +199,25 @@ export function IFAirportCard({ icao, label }: IFAirportCardProps) {
         )}
       </div>
     </div>
+  );
+}
+
+function FeatureBadge({ label, enabled }: { label: string; enabled?: boolean }) {
+  if (enabled === undefined) {
+    return (
+      <Badge variant="outline" className="text-xs text-muted-foreground">
+        {label}: N/A
+      </Badge>
+    );
+  }
+  
+  return (
+    <Badge 
+      variant={enabled ? "default" : "secondary"}
+      className={`text-xs ${enabled ? 'bg-success/20 text-success border-success/30' : 'text-muted-foreground'}`}
+    >
+      {enabled ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
+      {label}
+    </Badge>
   );
 }

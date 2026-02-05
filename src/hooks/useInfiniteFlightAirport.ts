@@ -14,6 +14,10 @@ export interface IFAirportData {
   magneticVariation: number;
   class: number;
   timezone: string | null;
+  has3dBuildings?: boolean;
+  hasJetbridges?: boolean;
+  hasSafedockUnits?: boolean;
+  hasTaxiwayRouting?: boolean;
   runways: Array<{
     name: string;
     bearing: number;

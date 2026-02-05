@@ -9,6 +9,7 @@ import { useSimBriefOFP, OFPData } from '@/hooks/useSimBriefOFP';
 import { IFAirportCard } from '@/components/aviation/IFAirportCard';
 import { ATISCard } from '@/components/aviation/ATISCard';
 import { MetarWeatherCard } from '@/components/aviation/MetarWeatherCard';
+import { FlightRouteMap } from '@/components/aviation/FlightRouteMap';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { clearPendingOFP } from '@/lib/simbrief';
@@ -270,6 +271,19 @@ export default function OFPViewer() {
 
             {/* Route Tab */}
             <TabsContent value="route" className="space-y-6">
+              {/* Interactive Flight Route Map */}
+              <div className="bg-card border border-border rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-1 h-6 bg-warning rounded-full" />
+                  <h3 className="text-lg font-semibold text-foreground">Flight Route Map</h3>
+                </div>
+                <FlightRouteMap 
+                  navlog={ofpData.navlog}
+                  origin={ofpData.origin}
+                  destination={ofpData.destination}
+                />
+              </div>
+
               <div className="bg-card border border-border rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-1 h-6 bg-warning rounded-full" />
