@@ -150,8 +150,8 @@
          "Content-Type": "application/json",
        },
        body: JSON.stringify({
-         username: "AFL Virtual Operations",
-         avatar_url: "https://i.imgur.com/WnQqHJP.png",
+         username: "AFLV BOT",
+         avatar_url: "https://aflv-cargo.vercel.app/logo.png",
          embeds: [embed],
        }),
      });
