@@ -1,0 +1,615 @@
+import { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/lib/auth';
+import DashboardLayout from '@/components/DashboardLayout';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
+import { Plane, ArrowLeft, Settings, Fuel, Map, AlertCircle, Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { SimBriefFormData, storePendingOFP, openSimBriefPopup, monitorSimBriefPopup, calculateOfpId } from '@/lib/simbrief';
+
+interface Contract {
+  id: string;
+  flight_number: string;
+  departure_city: string;
+  arrival_city: string;
+  dep_icao: string;
+  arr_icao: string;
+  duration: string;
+}
+
+interface Aircraft {
+  id: string;
+  registration: string;
+  type: string;
+}
+
+interface CargoItem {
+  id: string;
+  name: string;
+  weight: number;
+}
+
+export default function OFPGenerator() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  
+  const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const popupRef = useRef<Window | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
+  
+  // Form state
+  const [formData, setFormData] = useState<SimBriefFormData>({
+    orig: '',
+    dest: '',
+    type: 'MD1F',
+    airline: 'AFL',
+    fltnum: '',
+    reg: '',
+    units: 'KGS',
+    contpct: 'auto',
+    resvrule: '45',
+    navlog: '1',
+    etops: '0',
+    stepclimbs: '1',
+    tlr: '1',
+    notams: '1',
+    firnot: '0',
+    maps: 'detail',
+    planformat: 'lido',
+  });
+  
+  // Session data
+  const [contract, setContract] = useState<Contract | null>(null);
+  const [aircraft, setAircraft] = useState<Aircraft | null>(null);
+  const [cargoItems, setCargoItems] = useState<CargoItem[]>([]);
+  const [deliveryId, setDeliveryId] = useState<string | null>(null);
+  const [totalWeight, setTotalWeight] = useState(0);
+  
+  useEffect(() => {
+    // Load data from session storage
+    const contractData = sessionStorage.getItem('selectedContract');
+    const aircraftId = sessionStorage.getItem('selectedAircraft');
+    const cargoData = sessionStorage.getItem('selectedCargoItems');
+    const deliveryIdData = sessionStorage.getItem('currentDeliveryId');
+    const weightData = sessionStorage.getItem('totalCargoWeight');
+    
+    if (!contractData) {
+      toast({
+        title: 'Missing Selection',
+        description: 'Please complete the cargo selection process first',
+        variant: 'destructive',
+      });
+      navigate('/dashboard/cargo');
+      return;
+    }
+    
+    const parsedContract: Contract = JSON.parse(contractData);
+    setContract(parsedContract);
+    
+    if (cargoData) {
+      setCargoItems(JSON.parse(cargoData));
+    }
+    
+    if (deliveryIdData) {
+      setDeliveryId(deliveryIdData);
+    }
+    
+    if (weightData) {
+      setTotalWeight(parseInt(weightData));
+    }
+    
+    // Pre-fill form data from contract
+    setFormData(prev => ({
+      ...prev,
+      orig: parsedContract.dep_icao,
+      dest: parsedContract.arr_icao,
+      fltnum: parsedContract.flight_number.replace('RU', ''),
+      cargo: weightData || undefined,
+    }));
+    
+    // Fetch aircraft details
+    if (aircraftId) {
+      fetchAircraft(aircraftId);
+    }
+  }, []);
+  
+  const fetchAircraft = async (aircraftId: string) => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('aircraft')
+        .select('id, registration, type')
+        .eq('id', aircraftId)
+        .single();
+        
+      if (error) throw error;
+      
+      setAircraft(data);
+      // Map database aircraft type to SimBrief ICAO code
+      const typeMapping: Record<string, string> = {
+        'MD-11F': 'MD1F',
+        'MD11': 'MD1F',
+        'B777F': 'B77L',
+        'B747-8F': 'B748',
+        'A330-200F': 'A332',
+        'B767-300F': 'B763',
+      };
+      const simbriefType = typeMapping[data.type] || data.type || 'MD1F';
+      setFormData(prev => ({
+        ...prev,
+        type: simbriefType,
+        reg: data.registration,
+      }));
+    } catch (error) {
+      console.error('Error fetching aircraft:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleInputChange = (field: keyof SimBriefFormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+  
+  const handleCheckboxChange = (field: keyof SimBriefFormData, checked: boolean) => {
+    setFormData(prev => ({ ...prev, [field]: checked ? '1' : '0' }));
+  };
+  
+  const handleGenerateOFP = async () => {
+    if (!contract || !user) return;
+    
+    setGenerating(true);
+    
+    try {
+      // Output page is the callback URL - SimBrief will redirect the popup here with ofp_id
+      const outputPage = `${window.location.origin}/simbrief/callback`;
+      
+      // Open SimBrief popup
+      const { popup, timestamp } = await openSimBriefPopup(formData, outputPage);
+      
+      if (!popup) {
+        throw new Error('Failed to open SimBrief popup. Please disable your pop-up blocker.');
+      }
+      
+      popupRef.current = popup;
+      
+      // Store pending data for retrieval after redirect
+      storePendingOFP({
+        deliveryId: deliveryId || '',
+        contractId: contract.id,
+        timestamp,
+        formData,
+      });
+      
+      toast({
+        title: 'SimBrief Opened',
+        description: 'Complete the flight plan in the popup. You will be redirected when done.',
+      });
+      
+      // Monitor popup - when it closes, redirect to viewer with calculated ofp_id
+      // The VIEWER page handles fetching the OFP data
+      cleanupRef.current = monitorSimBriefPopup(
+        popup,
+        formData,
+        timestamp,
+        (ofpId) => {
+          // Popup closed - redirect to viewer with ofp_id
+          setGenerating(false);
+          navigate(`/dashboard/ofp-viewer?ofp_id=${ofpId}`);
+        },
+        () => {
+          // Timeout
+          setGenerating(false);
+          toast({
+            title: 'Timeout',
+            description: 'SimBrief took too long to respond',
+            variant: 'destructive',
+          });
+        }
+      );
+      
+    } catch (error) {
+      setGenerating(false);
+      console.error('Error generating OFP:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to generate flight plan',
+        variant: 'destructive',
+      });
+    }
+  };
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+      }
+      if (popupRef.current && !popupRef.current.closed) {
+        popupRef.current.close();
+      }
+    };
+  }, []);
+  
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+  
+  return (
+    <DashboardLayout>
+      <div className="space-y-6 max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => navigate('/dashboard/cargo')}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold">Generate Flight Plan</h1>
+              <p className="text-muted-foreground">
+                Configure SimBrief dispatch options
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        {/* Flight Summary */}
+        {contract && (
+          <Card className="aeroflot-gradient text-primary-foreground">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+                    <Plane className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-sm opacity-80">Flight</p>
+                    <p className="text-2xl font-bold">{contract.flight_number}</p>
+                  </div>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm opacity-80">Route</p>
+                  <p className="text-lg font-semibold">
+                    {contract.dep_icao} → {contract.arr_icao}
+                  </p>
+                  <p className="text-sm opacity-80">
+                    {contract.departure_city} to {contract.arrival_city}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm opacity-80">Cargo Weight</p>
+                  <p className="text-lg font-semibold">
+                    {(totalWeight / 1000).toFixed(1)}t
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        
+        {/* Form */}
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Flight Info */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Plane className="h-5 w-5" />
+                Flight Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="orig">Origin ICAO</Label>
+                  <Input
+                    id="orig"
+                    value={formData.orig}
+                    onChange={(e) => handleInputChange('orig', e.target.value.toUpperCase())}
+                    maxLength={4}
+                    placeholder="XXXX"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="dest">Destination ICAO</Label>
+                  <Input
+                    id="dest"
+                    value={formData.dest}
+                    onChange={(e) => handleInputChange('dest', e.target.value.toUpperCase())}
+                    maxLength={4}
+                    placeholder="XXXX"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="airline">Airline Code</Label>
+                  <Input
+                    id="airline"
+                    value={formData.airline}
+                    onChange={(e) => handleInputChange('airline', e.target.value.toUpperCase())}
+                    maxLength={3}
+                    placeholder="AFL"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="fltnum">Flight Number</Label>
+                  <Input
+                    id="fltnum"
+                    value={formData.fltnum}
+                    onChange={(e) => handleInputChange('fltnum', e.target.value)}
+                    placeholder="1234"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="type">Aircraft Type</Label>
+                  <Select 
+                    value={formData.type} 
+                    onValueChange={(v) => handleInputChange('type', v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MD1F">MD-11F</SelectItem>
+                      <SelectItem value="B77L">Boeing 777F</SelectItem>
+                      <SelectItem value="B748">Boeing 747-8F</SelectItem>
+                      <SelectItem value="A332">Airbus A330-200F</SelectItem>
+                      <SelectItem value="B763">Boeing 767-300F</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="reg">Registration</Label>
+                  <Input
+                    id="reg"
+                    value={formData.reg || ''}
+                    onChange={(e) => handleInputChange('reg', e.target.value.toUpperCase())}
+                    placeholder="VP-XXX"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <Label htmlFor="route">Route (optional)</Label>
+                <Textarea
+                  id="route"
+                  value={formData.route || ''}
+                  onChange={(e) => handleInputChange('route', e.target.value.toUpperCase())}
+                  placeholder="Leave empty for SimBrief suggested route"
+                  rows={2}
+                />
+              </div>
+            </CardContent>
+          </Card>
+          
+          {/* Dispatch Options */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings className="h-5 w-5" />
+                Dispatch Options
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="units">Units</Label>
+                  <Select 
+                    value={formData.units} 
+                    onValueChange={(v) => handleInputChange('units', v as 'KGS' | 'LBS')}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="KGS">Kilograms (KGS)</SelectItem>
+                      <SelectItem value="LBS">Pounds (LBS)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="planformat">OFP Layout</Label>
+                  <Select 
+                    value={formData.planformat} 
+                    onValueChange={(v) => handleInputChange('planformat', v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="lido">LIDO</SelectItem>
+                      <SelectItem value="aal">American Airlines</SelectItem>
+                      <SelectItem value="baw">British Airways</SelectItem>
+                      <SelectItem value="dal">Delta Airlines</SelectItem>
+                      <SelectItem value="uae">Emirates</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="contpct">Contingency Fuel</Label>
+                  <Select 
+                    value={formData.contpct} 
+                    onValueChange={(v) => handleInputChange('contpct', v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">AUTO</SelectItem>
+                      <SelectItem value="0">0%</SelectItem>
+                      <SelectItem value="0.02">2%</SelectItem>
+                      <SelectItem value="0.03">3%</SelectItem>
+                      <SelectItem value="0.05">5%</SelectItem>
+                      <SelectItem value="0.1">10%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="resvrule">Reserve Fuel</Label>
+                  <Select 
+                    value={formData.resvrule} 
+                    onValueChange={(v) => handleInputChange('resvrule', v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">AUTO</SelectItem>
+                      <SelectItem value="30">30 MIN</SelectItem>
+                      <SelectItem value="45">45 MIN</SelectItem>
+                      <SelectItem value="60">60 MIN</SelectItem>
+                      <SelectItem value="90">90 MIN</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <div>
+                <Label htmlFor="maps">Flight Maps</Label>
+                <Select 
+                  value={formData.maps} 
+                  onValueChange={(v) => handleInputChange('maps', v as 'detail' | 'simple' | 'none')}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="detail">Detailed</SelectItem>
+                    <SelectItem value="simple">Simple</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-3">
+                <Label>Planning Options</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="navlog"
+                      checked={formData.navlog === '1'}
+                      onCheckedChange={(c) => handleCheckboxChange('navlog', !!c)}
+                    />
+                    <label htmlFor="navlog" className="text-sm">Detailed Navlog</label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="stepclimbs"
+                      checked={formData.stepclimbs === '1'}
+                      onCheckedChange={(c) => handleCheckboxChange('stepclimbs', !!c)}
+                    />
+                    <label htmlFor="stepclimbs" className="text-sm">Plan Stepclimbs</label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="tlr"
+                      checked={formData.tlr === '1'}
+                      onCheckedChange={(c) => handleCheckboxChange('tlr', !!c)}
+                    />
+                    <label htmlFor="tlr" className="text-sm">Runway Analysis</label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="notams"
+                      checked={formData.notams === '1'}
+                      onCheckedChange={(c) => handleCheckboxChange('notams', !!c)}
+                    />
+                    <label htmlFor="notams" className="text-sm">Include NOTAMs</label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="etops"
+                      checked={formData.etops === '1'}
+                      onCheckedChange={(c) => handleCheckboxChange('etops', !!c)}
+                    />
+                    <label htmlFor="etops" className="text-sm">ETOPS Planning</label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="firnot"
+                      checked={formData.firnot === '1'}
+                      onCheckedChange={(c) => handleCheckboxChange('firnot', !!c)}
+                    />
+                    <label htmlFor="firnot" className="text-sm">FIR NOTAMs</label>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+        
+        {/* Warning */}
+        <Card className="border-warning/50 bg-warning/5">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-warning mt-0.5" />
+              <div className="text-sm">
+                <p className="font-medium text-warning">SimBrief Account Required</p>
+                <p className="text-muted-foreground mt-1">
+                  A popup window will open for SimBrief. If you're not logged in, you'll need to sign in with your SimBrief/Navigraph account. 
+                  Please disable pop-up blockers for this site.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        {/* Action Button */}
+        <div className="flex justify-end gap-4">
+          <Button 
+            variant="outline" 
+            onClick={() => navigate('/dashboard/cargo')}
+            disabled={generating}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleGenerateOFP}
+            disabled={generating || !formData.orig || !formData.dest}
+            className="aeroflot-gradient text-primary-foreground min-w-[200px]"
+            size="lg"
+          >
+            {generating ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Waiting for SimBrief...
+              </>
+            ) : (
+              <>
+                <Plane className="h-4 w-4 mr-2" />
+                Generate Flight Plan
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
+}
