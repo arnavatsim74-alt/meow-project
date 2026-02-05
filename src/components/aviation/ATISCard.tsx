@@ -1,4 +1,4 @@
-import { Radio, RefreshCw, AlertCircle, Wifi } from 'lucide-react';
+import { Radio, RefreshCw, AlertCircle, Wifi, Server } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useInfiniteFlightATIS } from '@/hooks/useInfiniteFlightATIS';
@@ -15,7 +15,7 @@ export function ATISCard({ icao, label }: ATISCardProps) {
     return (
       <div className="bg-card border border-border rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
-          <Radio className="h-5 w-5 text-primary" />
+          <Radio className="h-5 w-5 text-primary animate-pulse" />
           <span className="font-medium text-card-foreground">{label} ATIS - {icao}</span>
         </div>
         <Skeleton className="h-20 w-full" />
@@ -43,11 +43,12 @@ export function ATISCard({ icao, label }: ATISCardProps) {
     );
   }
 
-  // Extract ATIS text - data.atis is an ATISData object with an 'atis' string field
-  const atisText = data?.atis && typeof data.atis === 'object' && 'atis' in data.atis
-    ? (data.atis as { atis?: string }).atis
+  // ATIS is now returned as a string directly, not nested in an object
+  const atisText = data?.atis && typeof data.atis === 'string' 
+    ? data.atis.trim() 
     : null;
-  const hasATIS = atisText && typeof atisText === 'string' && atisText.trim().length > 0;
+  
+  const hasATIS = atisText && atisText.length > 0;
 
   return (
     <div className="bg-card border border-border rounded-xl p-4">
@@ -62,7 +63,13 @@ export function ATISCard({ icao, label }: ATISCardProps) {
             </span>
           )}
         </div>
-        <Button variant="ghost" size="sm" onClick={refetch}>
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={refetch}
+          className="hover:bg-primary/10"
+          title="Refresh ATIS"
+        >
           <RefreshCw className="h-4 w-4" />
         </Button>
       </div>
@@ -78,33 +85,43 @@ export function ATISCard({ icao, label }: ATISCardProps) {
           <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
             {data?.session?.name && (
               <span className="flex items-center gap-1">
+                <Server className="h-3 w-3" />
                 <span className="font-medium">Server:</span>
-                {data.session.name}
+                <span className="text-slate-300">{data.session.name}</span>
               </span>
             )}
             {data?.airport && (
               <span className="flex items-center gap-1">
+                <Radio className="h-3 w-3" />
                 <span className="font-medium">Airport:</span>
-                {data.airport}
+                <span className="text-slate-300">{data.airport}</span>
               </span>
             )}
           </div>
         </div>
       ) : (
-        <div className="text-center py-4">
-          <Radio className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
-          <p className="text-sm text-muted-foreground">
+        <div className="text-center py-6">
+          <Radio className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
+          <p className="text-sm text-muted-foreground font-medium mb-1">
             {data?.message || `No ATIS available for ${icao}`}
           </p>
+          
           {data?.sessions && data.sessions.length > 0 && (
-            <p className="text-xs text-muted-foreground/70 mt-2">
-              Active servers: {data.sessions.map(s => s.name).join(', ')}
-            </p>
+            <div className="mt-3 p-2 bg-muted/50 rounded-md">
+              <p className="text-xs text-muted-foreground/80 mb-1">
+                Active Infinite Flight servers:
+              </p>
+              <p className="text-xs text-muted-foreground font-mono">
+                {data.sessions.map(s => s.name).join(', ')}
+              </p>
+            </div>
           )}
+          
           {data?.error && (
-            <p className="text-xs text-destructive/70 mt-2">
-              {data.error}
-            </p>
+            <div className="mt-3 flex items-center justify-center gap-2 text-xs text-destructive/80">
+              <AlertCircle className="h-3 w-3" />
+              <span>{data.error}</span>
+            </div>
           )}
         </div>
       )}
