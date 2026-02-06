@@ -23,11 +23,19 @@ export default function SimBriefCallback() {
     if (ofpId) {
       console.log('SimBrief callback received ofp_id:', ofpId);
       
-      // Store the ofp_id so parent can retrieve it if needed
-      sessionStorage.setItem('simbrief_ofp_id', ofpId);
-      
+      // Persist the ofp_id so the parent window can retrieve it
+      // (localStorage is shared across windows on the same origin; sessionStorage is not)
+      localStorage.setItem('simbrief_ofp_id', ofpId);
+
+      // Also try to message the opener directly (best-effort)
+      try {
+        window.opener?.postMessage({ type: 'SIMBRIEF_OFP_ID', ofpId }, window.location.origin);
+      } catch {
+        // ignore
+      }
+
       // Close this popup - the parent window will handle redirect
-      // We wait a moment to ensure the session storage is written
+      // We wait a moment to ensure storage/message is delivered
       setTimeout(() => {
         window.close();
       }, 500);

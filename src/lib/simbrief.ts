@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import md5 from 'blueimp-md5';
 
 export interface SimBriefFormData {
   orig: string;
@@ -48,21 +49,16 @@ export function getPendingOFP(): PendingOFP | null {
 // Clear pending OFP data
 export function clearPendingOFP(): void {
   sessionStorage.removeItem('pending_ofp');
-  sessionStorage.removeItem('simbrief_ofp_id');
+  localStorage.removeItem('simbrief_ofp_id');
 }
 
 // Calculate OFP ID based on form params and timestamp
-// SimBrief format: {timestamp}_{MD5(orig+dest+type)[:10].toUpperCase()}
+// Format: {timestamp}_{MD5_HASH_FIRST_10_CHARS_UPPERCASE}
+// Example: 1769239995_A33F87B1DF
 export function calculateOfpId(timestamp: number, orig: string, dest: string, type: string): string {
-  // Simple hash for suffix - matches SimBrief's format
-  const suffix = (orig + dest + type).toUpperCase();
-  let hash = 0;
-  for (let i = 0; i < suffix.length; i++) {
-    const char = suffix.charCodeAt(i);
-    hash = ((hash << 5) - hash + char) & 0xFFFFFFFF;
-  }
-  const hexSuffix = Math.abs(hash).toString(16).toUpperCase().padStart(10, '0').slice(0, 10);
-  return `${timestamp}_${hexSuffix}`;
+  const fullHash = md5(orig.toUpperCase() + dest.toUpperCase() + type);
+  const shortHash = fullHash.substring(0, 10).toUpperCase();
+  return `${timestamp}_${shortHash}`;
 }
 
 // Open SimBrief popup with form data
@@ -71,19 +67,19 @@ export async function openSimBriefPopup(
   outputPage: string
 ): Promise<{ popup: Window | null; timestamp: number }> {
   const timestamp = Math.floor(Date.now() / 1000);
-  
-  // Remove protocol from outputPage for the API call
-  const outputPageClean = outputPage.replace(/^https?:\/\//, '');
-  
+
+  // Use the exact outputpage value for both API code generation and the SimBrief request
+  const outputpage = outputPage;
+
   // Get API code from backend
   const { data, error } = await supabase.functions.invoke('simbrief-api', {
     body: {
       action: 'generate_api_code',
-      orig: formData.orig,
-      dest: formData.dest,
+      orig: formData.orig.toUpperCase(),
+      dest: formData.dest.toUpperCase(),
       type: formData.type,
       timestamp,
-      outputpage: outputPageClean,
+      outputpage,
     },
   });
 
@@ -98,7 +94,7 @@ export async function openSimBriefPopup(
   
   // Required params
   params.set('apicode', data.api_code);
-  params.set('outputpage', outputPage);
+  params.set('outputpage', outputpage);
   params.set('timestamp', timestamp.toString());
   params.set('orig', formData.orig.toUpperCase());
   params.set('dest', formData.dest.toUpperCase());
@@ -154,10 +150,10 @@ export function monitorSimBriefPopup(
     if (popup.closed) {
       clearInterval(checkInterval);
       
-      // Check if we got an ofp_id from the callback
-      const ofpId = sessionStorage.getItem('simbrief_ofp_id');
+      // Check if we got an ofp_id from the callback (stored by the popup)
+      const ofpId = localStorage.getItem('simbrief_ofp_id');
       if (ofpId) {
-        sessionStorage.removeItem('simbrief_ofp_id');
+        localStorage.removeItem('simbrief_ofp_id');
         onComplete(ofpId);
       } else {
         // No ofp_id but popup closed - calculate expected ID as fallback

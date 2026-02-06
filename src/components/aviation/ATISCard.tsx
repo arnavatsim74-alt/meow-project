@@ -43,11 +43,9 @@ export function ATISCard({ icao, label }: ATISCardProps) {
     );
   }
 
-  // ATIS is now returned as a string directly, not nested in an object
-  const atisText = data?.atis && typeof data.atis === 'string' 
-    ? data.atis.trim() 
-    : null;
-  
+  // ATIS is returned as an object: { atis: { ... , atis: string } }
+  const atisText = data?.atis?.atis ? data.atis.atis.trim() : null;
+
   const hasATIS = atisText && atisText.length > 0;
 
   return (

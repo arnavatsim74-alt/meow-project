@@ -23,7 +23,16 @@ import AeronauticalCharts from "./pages/AeronauticalCharts";
 import NotFound from "./pages/NotFound";
 import SimBriefCallback from "./pages/SimBriefCallback";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60_000,
+      gcTime: 10 * 60_000,
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
