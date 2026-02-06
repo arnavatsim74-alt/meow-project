@@ -68,8 +68,9 @@ export async function openSimBriefPopup(
 ): Promise<{ popup: Window | null; timestamp: number }> {
   const timestamp = Math.floor(Date.now() / 1000);
 
-  // Use the exact outputpage value for both API code generation and the SimBrief request
-  const outputpage = outputPage;
+  // SimBrief VA API expects outputpage WITHOUT protocol (no https://)
+  // This value is also what is used in the API code MD5 request.
+  const outputpage = outputPage.replace(/^https?:\/\//, '');
 
   // Get API code from backend
   const { data, error } = await supabase.functions.invoke('simbrief-api', {
@@ -134,6 +135,23 @@ export async function openSimBriefPopup(
   return { popup, timestamp };
 }
 
+// Prefetch OFP XML (best-effort) so the viewer can render instantly.
+export async function prefetchOfpXml(ofpId: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('simbrief-api', {
+      body: { action: 'fetch_ofp', ofp_id: ofpId },
+    });
+
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+
+    return typeof data?.raw_xml === 'string' ? data.raw_xml : null;
+  } catch (e) {
+    console.warn('Prefetch OFP XML failed:', e);
+    return null;
+  }
+}
+
 // Monitor SimBrief popup and handle callback
 export function monitorSimBriefPopup(
   popup: Window,
@@ -144,36 +162,65 @@ export function monitorSimBriefPopup(
   timeoutMs: number = 600000 // 10 minutes default
 ): () => void {
   const startTime = Date.now();
-  
-  const checkInterval = setInterval(() => {
+  let messageOfpId: string | null = null;
+
+  const onMessage = (event: MessageEvent) => {
+    if (event.origin !== window.location.origin) return;
+    const data = event.data as { type?: string; ofpId?: string } | null;
+    if (data?.type === 'SIMBRIEF_OFP_ID' && typeof data.ofpId === 'string') {
+      messageOfpId = data.ofpId;
+      try {
+        localStorage.setItem('simbrief_ofp_id', messageOfpId);
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  window.addEventListener('message', onMessage);
+
+  const checkInterval = window.setInterval(() => {
     // Check if popup was closed
     if (popup.closed) {
-      clearInterval(checkInterval);
-      
-      // Check if we got an ofp_id from the callback (stored by the popup)
-      const ofpId = localStorage.getItem('simbrief_ofp_id');
+      window.clearInterval(checkInterval);
+      window.removeEventListener('message', onMessage);
+
+      // Prefer callback-provided ofp_id (message/localStorage), then fallback to calculated ID
+      const stored = (() => {
+        try {
+          return localStorage.getItem('simbrief_ofp_id');
+        } catch {
+          return null;
+        }
+      })();
+
+      const ofpId = messageOfpId || stored;
       if (ofpId) {
-        localStorage.removeItem('simbrief_ofp_id');
+        try {
+          localStorage.removeItem('simbrief_ofp_id');
+        } catch {
+          // ignore
+        }
         onComplete(ofpId);
       } else {
-        // No ofp_id but popup closed - calculate expected ID as fallback
         const calculatedId = calculateOfpId(timestamp, formData.orig, formData.dest, formData.type);
         onComplete(calculatedId);
       }
       return;
     }
-    
+
     // Check for timeout
     if (Date.now() - startTime > timeoutMs) {
-      clearInterval(checkInterval);
+      window.clearInterval(checkInterval);
+      window.removeEventListener('message', onMessage);
       popup.close();
       onTimeout();
-      return;
     }
   }, 500);
-  
+
   // Return cleanup function
   return () => {
-    clearInterval(checkInterval);
+    window.clearInterval(checkInterval);
+    window.removeEventListener('message', onMessage);
   };
 }

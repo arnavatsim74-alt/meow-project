@@ -10,7 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { SimBriefFormData, storePendingOFP, openSimBriefPopup, monitorSimBriefPopup, clearPendingOFP } from '@/lib/simbrief';
+import { SimBriefFormData, storePendingOFP, openSimBriefPopup, monitorSimBriefPopup, clearPendingOFP, prefetchOfpXml } from '@/lib/simbrief';
 
 const AIRCRAFT_TYPES = [
   { code: 'A20N', name: 'Airbus A320neo' },
@@ -142,9 +142,23 @@ export default function SimBriefDispatch() {
         formData,
         timestamp,
         (ofpId) => {
-          setGenerating(false);
-          // Navigate to OFP Viewer with the ofp_id
-          navigate(`/ofp?ofp_id=${ofpId}${legId ? `&legId=${legId}` : ''}`);
+          // Prefetch OFP XML (best-effort) before navigation
+          (async () => {
+            const prefetchedRawXml = await Promise.race([
+              prefetchOfpXml(ofpId),
+              new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 3000)),
+            ]);
+
+            setGenerating(false);
+
+            navigate(
+              `/ofp?ofp_id=${ofpId}${legId ? `&legId=${legId}` : ''}`,
+              prefetchedRawXml ? { state: { prefetchedOFP: { ofpId, rawXml: prefetchedRawXml } } } : undefined
+            );
+          })().catch(() => {
+            setGenerating(false);
+            navigate(`/ofp?ofp_id=${ofpId}${legId ? `&legId=${legId}` : ''}`);
+          });
         },
         () => {
           setGenerating(false);
