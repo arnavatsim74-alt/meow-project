@@ -135,23 +135,6 @@ export async function openSimBriefPopup(
   return { popup, timestamp };
 }
 
-// Prefetch OFP XML (best-effort) so the viewer can render instantly.
-export async function prefetchOfpXml(ofpId: string): Promise<string | null> {
-  try {
-    const { data, error } = await supabase.functions.invoke('simbrief-api', {
-      body: { action: 'fetch_ofp', ofp_id: ofpId },
-    });
-
-    if (error) throw error;
-    if (data?.error) throw new Error(data.error);
-
-    return typeof data?.raw_xml === 'string' ? data.raw_xml : null;
-  } catch (e) {
-    console.warn('Prefetch OFP XML failed:', e);
-    return null;
-  }
-}
-
 // Monitor SimBrief popup and handle callback
 export function monitorSimBriefPopup(
   popup: Window,

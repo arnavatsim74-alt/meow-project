@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo } from 'react';
-import { Navigate, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Navigate, useSearchParams, useNavigate } from 'react-router-dom';
 import { Plane, ArrowLeft, RefreshCw, Map, Navigation, Fuel, CloudRain, List, Info, FileText, Download, ExternalLink } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -12,46 +12,22 @@ import { MetarWeatherCard } from '@/components/aviation/MetarWeatherCard';
 import { FlightRouteMap } from '@/components/aviation/FlightRouteMap';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { clearPendingOFP } from '@/lib/simbrief';
-
-type PrefetchedOFPState = {
-  prefetchedOFP?: {
-    ofpId: string;
-    rawXml: string;
-  };
-};
 
 export default function OFPViewer() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
   const [searchParams] = useSearchParams();
-  const { ofpData, loading, error, fetchOFPById, loadOFPFromRawXml } = useSimBriefOFP();
+  const { ofpData, loading, error, fetchOFPById } = useSimBriefOFP();
   const [activeTab, setActiveTab] = useState('overview');
 
   const ofpId = searchParams.get('ofp_id');
   const legId = searchParams.get('legId') || '';
 
-  const prefetched = useMemo(() => {
-    const state = location.state as PrefetchedOFPState | null;
-    return state?.prefetchedOFP;
-  }, [location.state]);
-
   useEffect(() => {
     if (!ofpId || ofpData || loading) return;
-
-    // If we navigated here from the generator with prefetched XML, render immediately.
-    if (prefetched?.ofpId === ofpId && prefetched.rawXml) {
-      console.log('Using prefetched OFP XML for:', ofpId);
-      loadOFPFromRawXml(prefetched.rawXml);
-      clearPendingOFP();
-      return;
-    }
-
     console.log('Fetching OFP by ID:', ofpId);
     fetchOFPById(ofpId);
-    clearPendingOFP();
-  }, [ofpId, prefetched, ofpData, loading, fetchOFPById, loadOFPFromRawXml]);
+  }, [ofpId, ofpData, loading, fetchOFPById]);
 
   if (authLoading) {
     return (
