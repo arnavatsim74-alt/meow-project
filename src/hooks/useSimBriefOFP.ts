@@ -206,22 +206,6 @@ export function useSimBriefOFP() {
     }
   }, []);
 
-  const loadOFPFromRawXml = useCallback((rawXml: string) => {
-    try {
-      setError(null);
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(rawXml, 'text/xml');
-      const parsed = parseXMLToOFP(xmlDoc);
-      setOfpData(parsed);
-      return parsed;
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Failed to parse OFP XML';
-      setError(message);
-      console.error('Error parsing OFP XML:', e);
-      return null;
-    }
-  }, []);
-
   const clearOFP = useCallback(() => {
     setOfpData(null);
     setError(null);
@@ -232,7 +216,6 @@ export function useSimBriefOFP() {
     loading,
     error,
     fetchOFPById,
-    loadOFPFromRawXml,
     clearOFP,
   };
 }
