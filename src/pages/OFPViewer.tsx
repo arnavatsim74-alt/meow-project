@@ -207,15 +207,15 @@ export default function OFPViewer() {
 
           {/* Tabs Navigation */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="flex overflow-x-auto mb-6 bg-muted/50 w-full justify-start gap-0.5 p-1">
-              <TabsTrigger value="overview" className="text-xs flex-shrink-0">Overview</TabsTrigger>
-              <TabsTrigger value="map" className="text-xs flex-shrink-0">Map</TabsTrigger>
-              <TabsTrigger value="route" className="text-xs flex-shrink-0">Route</TabsTrigger>
-              <TabsTrigger value="fuel" className="text-xs flex-shrink-0">Fuel</TabsTrigger>
-              <TabsTrigger value="weather" className="text-xs flex-shrink-0">Weather</TabsTrigger>
-              <TabsTrigger value="navlog" className="text-xs flex-shrink-0">Nav Log</TabsTrigger>
-              <TabsTrigger value="airports" className="text-xs flex-shrink-0">Airports</TabsTrigger>
-              <TabsTrigger value="atis" className="text-xs flex-shrink-0">ATIS</TabsTrigger>
+            <TabsList className="w-full flex justify-center mb-6 bg-muted/50 p-1 rounded-lg">
+              <TabsTrigger value="overview" className="text-xs flex-1 min-w-0">Overview</TabsTrigger>
+              <TabsTrigger value="map" className="text-xs flex-1 min-w-0">Map</TabsTrigger>
+              <TabsTrigger value="route" className="text-xs flex-1 min-w-0">Route</TabsTrigger>
+              <TabsTrigger value="fuel" className="text-xs flex-1 min-w-0">Fuel</TabsTrigger>
+              <TabsTrigger value="weather" className="text-xs flex-1 min-w-0">Weather</TabsTrigger>
+              <TabsTrigger value="navlog" className="text-xs flex-1 min-w-0">Nav Log</TabsTrigger>
+              <TabsTrigger value="airports" className="text-xs flex-1 min-w-0">Airports</TabsTrigger>
+              <TabsTrigger value="atis" className="text-xs flex-1 min-w-0">ATIS</TabsTrigger>
             </TabsList>
 
             {/* Overview Tab */}

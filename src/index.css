@@ -8,98 +8,101 @@
 
 @layer base {
   :root {
-    /* Dark theme - proper contrast */
-    --background: 220 25% 10%;
-    --foreground: 210 20% 95%;
+    /* Light theme */
+    --background: 220 15% 96%;
+    --foreground: 220 25% 12%;
 
-    /* Dark cards */
-    --card: 220 25% 14%;
-    --card-foreground: 210 20% 95%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 12%;
 
-    --popover: 220 25% 14%;
-    --popover-foreground: 210 20% 95%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 12%;
 
-    /* Blue primary */
     --primary: 220 80% 55%;
     --primary-foreground: 0 0% 100%;
 
-    /* Dark secondary */
-    --secondary: 220 25% 18%;
-    --secondary-foreground: 210 20% 95%;
+    --secondary: 220 15% 90%;
+    --secondary-foreground: 220 25% 12%;
 
-    --muted: 220 20% 20%;
-    --muted-foreground: 210 15% 60%;
+    --muted: 220 15% 92%;
+    --muted-foreground: 220 10% 45%;
 
-    /* Green accent for success */
     --accent: 160 70% 45%;
     --accent-foreground: 0 0% 100%;
 
-    /* Success green */
-    --success: 160 70% 45%;
+    --success: 160 70% 40%;
     --success-foreground: 0 0% 100%;
 
-    /* Warning amber */
     --warning: 45 90% 50%;
     --warning-foreground: 20 10% 8%;
 
-    /* Info blue */
-    --info: 200 85% 55%;
+    --info: 200 85% 50%;
     --info-foreground: 0 0% 100%;
 
     --destructive: 0 70% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 20% 22%;
-    --input: 220 20% 22%;
+    --border: 220 15% 88%;
+    --input: 220 15% 88%;
     --ring: 220 80% 55%;
 
     --radius: 0.75rem;
 
-    /* Sidebar - Darker blue */
-    --sidebar-background: 220 30% 12%;
-    --sidebar-foreground: 210 20% 90%;
+    --sidebar-background: 220 20% 98%;
+    --sidebar-foreground: 220 25% 15%;
     --sidebar-primary: 220 80% 55%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 30% 18%;
-    --sidebar-accent-foreground: 210 20% 90%;
-    --sidebar-border: 220 25% 20%;
+    --sidebar-accent: 220 15% 93%;
+    --sidebar-accent-foreground: 220 25% 15%;
+    --sidebar-border: 220 15% 88%;
     --sidebar-ring: 220 80% 55%;
 
-    /* Custom VA colors */
     --va-blue: 220 80% 55%;
-    --va-dark: 220 30% 12%;
-    --va-card: 220 25% 14%;
-    --va-border: 220 20% 22%;
+    --va-dark: 220 20% 98%;
+    --va-card: 0 0% 100%;
+    --va-border: 220 15% 88%;
     --va-gold: 220 80% 55%;
   }
 
   .dark {
-    /* Dark mode uses same colors */
+    /* Dark theme - proper contrast */
     --background: 220 25% 10%;
     --foreground: 210 20% 95%;
+
     --card: 220 25% 14%;
     --card-foreground: 210 20% 95%;
+
     --popover: 220 25% 14%;
     --popover-foreground: 210 20% 95%;
+
     --primary: 220 80% 55%;
     --primary-foreground: 0 0% 100%;
+
     --secondary: 220 25% 18%;
     --secondary-foreground: 210 20% 95%;
+
     --muted: 220 20% 20%;
     --muted-foreground: 210 15% 60%;
+
     --accent: 160 70% 45%;
     --accent-foreground: 0 0% 100%;
+
     --success: 160 70% 45%;
     --success-foreground: 0 0% 100%;
+
     --warning: 45 90% 50%;
     --warning-foreground: 20 10% 8%;
+
     --info: 200 85% 55%;
     --info-foreground: 0 0% 100%;
+
     --destructive: 0 70% 50%;
     --destructive-foreground: 0 0% 100%;
+
     --border: 220 20% 22%;
     --input: 220 20% 22%;
     --ring: 220 80% 55%;
+
     --sidebar-background: 220 30% 12%;
     --sidebar-foreground: 210 20% 90%;
     --sidebar-primary: 220 80% 55%;
@@ -108,6 +111,7 @@
     --sidebar-accent-foreground: 210 20% 90%;
     --sidebar-border: 220 25% 20%;
     --sidebar-ring: 220 80% 55%;
+
     --va-blue: 220 80% 55%;
     --va-dark: 220 30% 12%;
     --va-card: 220 25% 14%;
