@@ -43,8 +43,9 @@ export function ATISCard({ icao, label }: ATISCardProps) {
     );
   }
 
-  // ATIS is returned as an object: { atis: { ... , atis: string } }
-  const atisText = data?.atis?.atis ? data.atis.atis.trim() : null;
+  // ATIS is returned as a string directly: { atis: "ATIS text..." }
+  const rawAtis = data?.atis;
+  const atisText = typeof rawAtis === 'string' ? rawAtis.trim() : null;
 
   const hasATIS = atisText && atisText.length > 0;
 
@@ -75,7 +76,7 @@ export function ATISCard({ icao, label }: ATISCardProps) {
       {hasATIS ? (
         <div className="space-y-3">
           {/* ATIS Message */}
-          <div className="bg-slate-900/50 rounded-lg p-3 font-mono text-sm text-slate-100 leading-relaxed whitespace-pre-wrap border border-slate-700/50">
+          <div className="bg-muted/50 rounded-lg p-3 font-mono text-sm text-foreground leading-relaxed whitespace-pre-wrap border border-border">
             {atisText}
           </div>
           
@@ -85,14 +86,14 @@ export function ATISCard({ icao, label }: ATISCardProps) {
               <span className="flex items-center gap-1">
                 <Server className="h-3 w-3" />
                 <span className="font-medium">Server:</span>
-                <span className="text-slate-300">{data.session.name}</span>
+                <span className="text-foreground/80">{data.session.name}</span>
               </span>
             )}
             {data?.airport && (
               <span className="flex items-center gap-1">
                 <Radio className="h-3 w-3" />
                 <span className="font-medium">Airport:</span>
-                <span className="text-slate-300">{data.airport}</span>
+                <span className="text-foreground/80">{data.airport}</span>
               </span>
             )}
           </div>

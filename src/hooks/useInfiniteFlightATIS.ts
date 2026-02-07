@@ -16,7 +16,7 @@ export interface ATISSession {
 }
 
 export interface ATISResponse {
-  atis: ATISData | null;
+  atis: string | null;
   session?: ATISSession;
   airport?: string;
   message?: string;

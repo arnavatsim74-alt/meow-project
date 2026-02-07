@@ -81,7 +81,11 @@ Deno.serve(async (req) => {
     }
 
     // Step 2: Try each active session to find ATIS for the airport
-    const sessions = sessionsData.result;
+    // Prioritize Expert server first (type 1 with highest worldType), then Training, then Casual
+    const sessions = [...sessionsData.result].sort((a, b) => {
+      const order: Record<string, number> = { 'Expert': 0, 'Training': 1, 'Casual': 2 };
+      return (order[a.name] ?? 3) - (order[b.name] ?? 3);
+    });
     let atisText: string | null = null;
     let foundSession: InfiniteFlightSession | null = null;
 

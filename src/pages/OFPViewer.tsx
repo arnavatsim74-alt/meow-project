@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useSearchParams, useNavigate } from 'react-router-dom';
-import { Plane, ArrowLeft, RefreshCw, Map, Navigation, Fuel, CloudRain, List, Info, FileText, Download, ExternalLink } from 'lucide-react';
+import { Plane, ArrowLeft, RefreshCw, Map, Navigation, Fuel, CloudRain, List, Info, FileText, Download, ExternalLink, Save, BookmarkPlus } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import { useSimBriefOFP, OFPData } from '@/hooks/useSimBriefOFP';
 import { IFAirportCard } from '@/components/aviation/IFAirportCard';
 import { ATISCard } from '@/components/aviation/ATISCard';
@@ -19,6 +21,8 @@ export default function OFPViewer() {
   const [searchParams] = useSearchParams();
   const { ofpData, loading, error, fetchOFPById } = useSimBriefOFP();
   const [activeTab, setActiveTab] = useState('overview');
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
 
   const ofpId = searchParams.get('ofp_id');
   const legId = searchParams.get('legId') || '';
@@ -88,6 +92,36 @@ export default function OFPViewer() {
     }
   };
 
+  const handleSaveOFP = async () => {
+    if (!ofpData || !user || !ofpId) return;
+    setSaving(true);
+    try {
+      const { error: saveError } = await supabase.from('saved_flight_plans').insert({
+        user_id: user.id,
+        ofp_id: ofpId,
+        callsign: ofpData.atc.callsign || null,
+        flight_number: ofpData.general.flight_number || null,
+        origin_icao: ofpData.origin.icao_code,
+        destination_icao: ofpData.destination.icao_code,
+        alternate_icao: ofpData.alternate.icao_code || null,
+        aircraft_type: ofpData.aircraft.icaocode || null,
+        aircraft_reg: ofpData.aircraft.reg || null,
+        route: ofpData.general.route || null,
+        cruise_altitude: ofpData.general.initial_altitude || null,
+        block_fuel: ofpData.fuel.plan_ramp || null,
+        est_time_enroute: ofpData.times.est_time_enroute || null,
+        distance_nm: ofpData.general.air_distance || null,
+        pax_count: ofpData.weights.pax_count || null,
+      });
+      if (saveError) throw saveError;
+      toast({ title: 'Flight plan saved', description: `${ofpData.origin.icao_code} → ${ofpData.destination.icao_code} saved to My Flight Plans` });
+    } catch (e) {
+      toast({ title: 'Save failed', description: e instanceof Error ? e.message : 'Failed to save flight plan', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Parse runway string to heading (e.g., "24L" -> 240)
   const parseRunwayHeading = (rwy: string | null): number => {
     if (!rwy) return 0;
@@ -117,10 +151,16 @@ export default function OFPViewer() {
             </div>
           )}
         </div>
-        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading} className="gap-2">
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleSaveOFP} disabled={saving || !ofpData} className="gap-2">
+            <BookmarkPlus className={`h-4 w-4 ${saving ? 'animate-pulse' : ''}`} />
+            Save
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading} className="gap-2">
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {loading && (
@@ -167,15 +207,15 @@ export default function OFPViewer() {
 
           {/* Tabs Navigation */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid grid-cols-4 lg:grid-cols-8 mb-6 bg-muted/50">
-              <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
-              <TabsTrigger value="map" className="text-xs">Map</TabsTrigger>
-              <TabsTrigger value="route" className="text-xs">Route</TabsTrigger>
-              <TabsTrigger value="fuel" className="text-xs">Fuel & Weights</TabsTrigger>
-              <TabsTrigger value="weather" className="text-xs">Weather</TabsTrigger>
-              <TabsTrigger value="navlog" className="text-xs">Nav Log</TabsTrigger>
-              <TabsTrigger value="airports" className="text-xs">Airports</TabsTrigger>
-              <TabsTrigger value="atis" className="text-xs">Live ATIS</TabsTrigger>
+            <TabsList className="flex overflow-x-auto mb-6 bg-muted/50 w-full justify-start gap-0.5 p-1">
+              <TabsTrigger value="overview" className="text-xs flex-shrink-0">Overview</TabsTrigger>
+              <TabsTrigger value="map" className="text-xs flex-shrink-0">Map</TabsTrigger>
+              <TabsTrigger value="route" className="text-xs flex-shrink-0">Route</TabsTrigger>
+              <TabsTrigger value="fuel" className="text-xs flex-shrink-0">Fuel</TabsTrigger>
+              <TabsTrigger value="weather" className="text-xs flex-shrink-0">Weather</TabsTrigger>
+              <TabsTrigger value="navlog" className="text-xs flex-shrink-0">Nav Log</TabsTrigger>
+              <TabsTrigger value="airports" className="text-xs flex-shrink-0">Airports</TabsTrigger>
+              <TabsTrigger value="atis" className="text-xs flex-shrink-0">ATIS</TabsTrigger>
             </TabsList>
 
             {/* Overview Tab */}

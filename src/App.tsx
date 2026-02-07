@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import Dispatch from "./pages/Dispatch";
 import SimBriefDispatch from "./pages/SimBriefDispatch";
 import OFPViewer from "./pages/OFPViewer";
+import MyFlightPlans from "./pages/MyFlightPlans";
 
 import SubmitPirep from "./pages/SubmitPirep";
 import MyPireps from "./pages/MyPireps";
@@ -49,6 +50,7 @@ const App = () => (
             <Route path="/dispatch" element={<Dispatch />} />
             <Route path="/simbrief" element={<SimBriefDispatch />} />
             <Route path="/ofp" element={<OFPViewer />} />
+            <Route path="/my-flight-plans" element={<MyFlightPlans />} />
             
             <Route path="/pirep" element={<SubmitPirep />} />
             <Route path="/my-pireps" element={<MyPireps />} />

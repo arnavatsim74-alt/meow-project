@@ -18,6 +18,7 @@ const pilotNavItems = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
   { icon: Plane, label: 'Flight Dispatch', href: '/dispatch' },
   { icon: FileText, label: 'OFP Generator', href: '/simbrief' },
+  { icon: BookOpen, label: 'My Flight Plans', href: '/my-flight-plans' },
   { icon: FileText, label: 'Submit PIREP', href: '/pirep' },
   { icon: BookOpen, label: 'My PIREPs', href: '/my-pireps' },
   { icon: Plane, label: 'Virtual Fleet', href: '/fleet' },

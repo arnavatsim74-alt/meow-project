@@ -561,6 +561,66 @@ export type Database = {
         }
         Relationships: []
       }
+      saved_flight_plans: {
+        Row: {
+          aircraft_reg: string | null
+          aircraft_type: string | null
+          alternate_icao: string | null
+          block_fuel: string | null
+          callsign: string | null
+          created_at: string
+          cruise_altitude: string | null
+          destination_icao: string
+          distance_nm: string | null
+          est_time_enroute: string | null
+          flight_number: string | null
+          id: string
+          ofp_id: string
+          origin_icao: string
+          pax_count: string | null
+          route: string | null
+          user_id: string
+        }
+        Insert: {
+          aircraft_reg?: string | null
+          aircraft_type?: string | null
+          alternate_icao?: string | null
+          block_fuel?: string | null
+          callsign?: string | null
+          created_at?: string
+          cruise_altitude?: string | null
+          destination_icao: string
+          distance_nm?: string | null
+          est_time_enroute?: string | null
+          flight_number?: string | null
+          id?: string
+          ofp_id: string
+          origin_icao: string
+          pax_count?: string | null
+          route?: string | null
+          user_id: string
+        }
+        Update: {
+          aircraft_reg?: string | null
+          aircraft_type?: string | null
+          alternate_icao?: string | null
+          block_fuel?: string | null
+          callsign?: string | null
+          created_at?: string
+          cruise_altitude?: string | null
+          destination_icao?: string
+          distance_nm?: string | null
+          est_time_enroute?: string | null
+          flight_number?: string | null
+          id?: string
+          ofp_id?: string
+          origin_icao?: string
+          pax_count?: string | null
+          route?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       type_ratings: {
         Row: {
           acquired_at: string
