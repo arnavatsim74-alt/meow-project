@@ -2,12 +2,26 @@
 import { json, corsHeaders } from "../_shared/http.ts";
 import { createAdminClient, createAuthedClient } from "../_shared/supabase.ts";
 
-function pickRandom<T>(arr: T[]) {
+function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
 function getRandomInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+/** Parse aircraft field: "A320", "Aeroflot - A320", "Aeroflot - A320, Air India - B77W" → type codes */
+function parseAircraftCodes(raw: string | null): string[] {
+  if (!raw) return [];
+  return raw.split(",").map((part) => {
+    const trimmed = part.trim();
+    // "Livery - Code" format
+    const dashIdx = trimmed.lastIndexOf("-");
+    if (dashIdx > 0) {
+      return trimmed.slice(dashIdx + 1).trim().toUpperCase();
+    }
+    return trimmed.toUpperCase();
+  }).filter(Boolean);
 }
 
 Deno.serve(async (req) => {
@@ -19,42 +33,41 @@ Deno.serve(async (req) => {
     if (userErr || !userData.user) return json({ error: "Unauthorized" }, { status: 401 });
 
     const admin = createAdminClient();
+    const userId = userData.user.id;
 
-    // Random leg count between 2 and 5
-    const legsRequested = getRandomInt(2, 5);
+    const body = await req.json().catch(() => ({}));
+    const departureBase = body?.departureBase as string | undefined;
+    const routingRule = (body?.routingRule as string) || "return_to_base";
 
     // Load profile
     const { data: profile, error: profileErr } = await admin
       .from("profiles")
       .select("callsign, base_airport, active_aircraft_family")
-      .eq("user_id", userData.user.id)
+      .eq("user_id", userId)
       .single();
-
     if (profileErr) throw profileErr;
 
-    // Choose an aircraft from virtual fleet
-    const { data: fleetPool, error: fleetErr } = await admin
+    const base = (departureBase || profile?.base_airport || "UUEE").toUpperCase();
+
+    // Choose aircraft from virtual fleet
+    const { data: fleetPool } = await admin
       .from("virtual_fleet")
       .select("id, tail_number, aircraft_id, aircraft:aircraft(id, family, type_code)")
       .eq("status", "idle")
       .limit(200);
 
-    if (fleetErr) throw fleetErr;
-
-    // Also get aircraft pool for fallback
-    const { data: aircraftPool, error: aircraftErr } = await admin
+    const { data: aircraftPool } = await admin
       .from("aircraft")
       .select("id, family, type_code")
       .limit(200) as { data: { id: string; family: string; type_code: string }[] | null; error: any };
 
-    if (aircraftErr) throw aircraftErr;
-    if (!aircraftPool || aircraftPool.length === 0) return json({ error: "No aircraft configured" }, { status: 400 });
+    if (!aircraftPool || aircraftPool.length === 0) {
+      return json({ error: "No aircraft configured" }, { status: 400 });
+    }
 
     const preferredFamily = profile?.active_aircraft_family ?? null;
-    
     type AircraftType = { id: string; family: string; type_code: string };
-    
-    // Try to find an idle aircraft from virtual fleet matching preferred family
+
     let chosenFleetAircraft: any = null;
     let chosenAircraft: AircraftType | null = null;
     let tailNumber: string | null = null;
@@ -69,7 +82,6 @@ Deno.serve(async (req) => {
         tailNumber = chosenFleetAircraft.tail_number;
       }
     }
-
     if (!chosenAircraft) {
       const preferredAircraft = preferredFamily
         ? aircraftPool.find((a) => a.family === preferredFamily) ?? null
@@ -81,69 +93,54 @@ Deno.serve(async (req) => {
     const { data: catalog, error: catalogErr } = await admin
       .from("route_catalog")
       .select("flight_number, dep_icao, arr_icao, aircraft, duration_mins")
-      .limit(2000);
+      .limit(5000);
 
     if (catalogErr) throw catalogErr;
     if (!catalog || catalog.length === 0) {
       return json({ error: "Route catalog is empty. Import routes first." }, { status: 400 });
     }
 
-    // Build route chain from user's base that returns to origin
-    const base = (profile?.base_airport ?? "UUEE").toUpperCase();
-    const remaining = [...catalog];
-
+    // Build route chain with STRICT continuity
+    const legsRequested = getRandomInt(2, 5);
     const selected: typeof catalog = [];
     let current = base;
-    const origin = base;
+    const used = new Set<string>();
 
-    // Select (legsRequested - 1) intermediate legs, then find return leg
-    for (let i = 0; i < legsRequested - 1; i++) {
-      const candidates = remaining.filter((r) => r.dep_icao?.toUpperCase() === current);
-      
-      // If no candidates from current position, pick randomly
-      const pickFrom = candidates.length > 0 ? candidates : remaining;
-      const route = pickRandom(pickFrom);
-      if (!route) break;
+    for (let i = 0; i < (routingRule === "return_to_base" ? legsRequested - 1 : legsRequested); i++) {
+      const candidates = catalog.filter(
+        (r) => r.dep_icao?.toUpperCase() === current && !used.has(r.flight_number)
+      );
+      if (candidates.length === 0) break; // No routes from current position - stop
 
+      const route = pickRandom(candidates);
       selected.push(route);
-      // Remove from remaining (avoid duplicates)
-      const idx = remaining.indexOf(route);
-      if (idx >= 0) remaining.splice(idx, 1);
-
+      used.add(route.flight_number);
       current = (route.arr_icao ?? "").toUpperCase();
     }
 
-    // Find return leg back to origin
-    const returnCandidates = remaining.filter((r) => 
-      r.dep_icao?.toUpperCase() === current && 
-      r.arr_icao?.toUpperCase() === origin
-    );
-
-    if (returnCandidates.length > 0) {
-      const returnRoute = pickRandom(returnCandidates);
-      selected.push(returnRoute);
-    } else {
-      // If no direct return, find any route that ends at origin
-      const anyReturnCandidates = remaining.filter((r) => 
-        r.arr_icao?.toUpperCase() === origin
+    // Return to base if needed
+    if (routingRule === "return_to_base" && current !== base && selected.length > 0) {
+      const returnCandidates = catalog.filter(
+        (r) => r.dep_icao?.toUpperCase() === current &&
+               r.arr_icao?.toUpperCase() === base &&
+               !used.has(r.flight_number)
       );
-      if (anyReturnCandidates.length > 0) {
-        const returnRoute = pickRandom(anyReturnCandidates);
-        selected.push(returnRoute);
+      if (returnCandidates.length > 0) {
+        selected.push(pickRandom(returnCandidates));
       } else {
-        // Create a synthetic return leg
+        // Synthetic return
         selected.push({
-          flight_number: `SU${getRandomInt(1000, 9999)}`,
+          flight_number: `AFL${getRandomInt(1000, 9999)}`,
           dep_icao: current,
-          arr_icao: origin,
+          arr_icao: base,
           aircraft: chosenAircraft?.type_code ?? "A320",
-          duration_mins: 120, // Default 2 hours
+          duration_mins: 120,
         });
       }
     }
 
     if (selected.length === 0) {
-      return json({ error: "Could not select routes" }, { status: 400 });
+      return json({ error: `No routes found departing from ${base}. Check route catalog.` }, { status: 400 });
     }
 
     // Create career request + routes + dispatch legs
@@ -152,24 +149,22 @@ Deno.serve(async (req) => {
     const { data: createdRequest, error: reqErr } = await admin
       .from("career_requests")
       .insert({
-        user_id: userData.user.id,
+        user_id: userId,
         status: "approved",
         requested_at: nowIso,
         reviewed_at: nowIso,
         reviewed_by: null,
         notes: "auto-assigned",
+        departure_base: base,
+        routing_rule: routingRule,
       })
       .select("id")
       .single();
-
     if (reqErr) throw reqErr;
 
-    // A simple distance estimate if not available (avg 450kt)
     const avgKts = 450;
-
     const dispatchGroupId = crypto.randomUUID();
 
-    // Insert routes first
     const routesToInsert = selected.map((r) => {
       const mins = r.duration_mins ?? 60;
       const hrs = mins / 60;
@@ -186,19 +181,17 @@ Deno.serve(async (req) => {
       .from("routes")
       .insert(routesToInsert)
       .select("id");
-
     if (routesErr) throw routesErr;
     if (!insertedRoutes || insertedRoutes.length !== routesToInsert.length) {
       return json({ error: "Failed to create routes" }, { status: 500 });
     }
 
-    // Routes are returned in insertion order
     const routeIds = insertedRoutes.map((x) => x.id);
 
-    const legsToInsert = selected.map((r, idx) => ({
-      user_id: userData.user.id,
+    const legsToInsert = selected.map((_r, idx) => ({
+      user_id: userId,
       route_id: routeIds[idx],
-      aircraft_id: chosenAircraft.id,
+      aircraft_id: chosenAircraft!.id,
       leg_number: idx + 1,
       callsign: profile?.callsign ?? "---",
       status: "assigned",
@@ -211,14 +204,13 @@ Deno.serve(async (req) => {
     const { error: legsErr } = await admin.from("dispatch_legs").insert(legsToInsert);
     if (legsErr) throw legsErr;
 
-    // Mark fleet aircraft as in_flight if using virtual fleet
     if (chosenFleetAircraft) {
       await admin
         .from("virtual_fleet")
-        .update({ 
-          status: "in_flight", 
-          assigned_to: userData.user.id,
-          current_location: selected[0]?.dep_icao ?? base
+        .update({
+          status: "in_flight",
+          assigned_to: userId,
+          current_location: selected[0]?.dep_icao ?? base,
         })
         .eq("id", chosenFleetAircraft.id);
     }

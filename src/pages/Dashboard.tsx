@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { formatCurrency } from '@/lib/currency';
 import { getRankByHours, getNextRank, getProgressToNextRank } from '@/lib/ranks';
+
 interface DispatchLeg {
   id: string;
   leg_number: number;
@@ -38,18 +39,11 @@ interface ActiveTypeRating {
   };
 }
 
-interface BaseInfo {
-  icao_code: string;
-  name: string;
-  multiplier: number;
-}
-
 export default function Dashboard() {
   const { user, profile, loading } = useAuth();
   const [dispatchLegs, setDispatchLegs] = useState<DispatchLeg[]>([]);
   const [recentPireps, setRecentPireps] = useState<RecentPirep[]>([]);
   const [activeTypeRating, setActiveTypeRating] = useState<ActiveTypeRating | null>(null);
-  const [baseInfo, setBaseInfo] = useState<BaseInfo | null>(null);
 
   const totalHours = profile?.total_hours || 0;
   const currentRank = getRankByHours(totalHours);
@@ -63,24 +57,6 @@ export default function Dashboard() {
       fetchActiveTypeRating();
     }
   }, [user]);
-
-  useEffect(() => {
-    if (profile?.base_airport) {
-      fetchBaseInfo();
-    }
-  }, [profile?.base_airport]);
-
-  const fetchBaseInfo = async () => {
-    const { data } = await supabase
-      .from('bases')
-      .select('icao_code, name, multiplier')
-      .eq('icao_code', profile!.base_airport)
-      .single();
-    
-    if (data) {
-      setBaseInfo(data);
-    }
-  };
 
   const fetchActiveTypeRating = async () => {
     const { data } = await supabase
@@ -128,7 +104,6 @@ export default function Dashboard() {
 
   if (!user) return <Navigate to="/auth" replace />;
   
-  // Check if user is approved
   if (profile && !profile.is_approved) {
     return <Navigate to="/pending-approval" replace />;
   }
@@ -144,7 +119,7 @@ export default function Dashboard() {
         <StatusBadge status="active" />
       </div>
 
-      {/* Stats Grid - 4 aligned cards */}
+      {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-card rounded-xl border border-border p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -184,7 +159,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Base Info */}
+      {/* Base & Aircraft Info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div className="bg-card rounded-xl border border-border p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -193,11 +168,8 @@ export default function Dashboard() {
           <div className="min-w-0">
             <p className="text-sm text-muted-foreground">Home Base</p>
             <p className="text-lg font-bold text-card-foreground truncate">
-              {baseInfo ? `${baseInfo.icao_code} - ${baseInfo.name}` : profile?.base_airport || 'Not Set'}
+              {profile?.base_airport || 'Not Set'}
             </p>
-            {baseInfo && (
-              <p className="text-xs text-primary">Multiplier: {baseInfo.multiplier}x</p>
-            )}
           </div>
         </div>
         <div className="bg-card rounded-xl border border-border p-4 flex items-center gap-3">
@@ -213,7 +185,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* NOTAM Card - Above Current Assignments */}
       <NotamCard />
 
       <div className="grid md:grid-cols-2 gap-6 mt-6">

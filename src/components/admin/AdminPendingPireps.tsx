@@ -87,24 +87,10 @@ export function AdminPendingPireps() {
             console.error('Error fetching profile for PIREP:', profileErr);
           }
           
-          // Fetch base multiplier
-          let baseMultiplier = 1;
-          if (profileData?.base_airport) {
-            const { data: baseData } = await supabase
-              .from('bases')
-              .select('multiplier')
-              .eq('icao_code', profileData.base_airport)
-              .single();
-            
-            if (baseData) {
-              baseMultiplier = Number(baseData.multiplier);
-            }
-          }
-          
           return {
             ...pirep,
             profile: profileData || { name: 'Unknown', callsign: '---', base_airport: null },
-            baseMultiplier,
+            baseMultiplier: 1,
           } as Pirep & { baseMultiplier: number };
         })
       );

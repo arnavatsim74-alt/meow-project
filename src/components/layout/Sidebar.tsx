@@ -33,9 +33,6 @@ const pilotNavItems = [
 
 const adminNavItems = [
   { icon: Users, label: 'Admin Panel', href: '/admin' },
-  { icon: Plane, label: 'Assign Dispatch', href: '/admin/dispatch' },
-  { icon: FileText, label: 'Review PIREPs', href: '/admin/pireps' },
-  { icon: Settings, label: 'Settings', href: '/admin/settings' },
 ];
 
 export function Sidebar() {
@@ -75,14 +72,14 @@ export function Sidebar() {
 
         {isAdmin && (
           <div className="space-y-1 mt-6">
-            <p className="px-3 py-2 text-xs font-semibold text-sidebar-foreground/50 uppercase">Admin Menu</p>
+            <p className="px-3 py-2 text-xs font-semibold text-sidebar-foreground/50 uppercase">Admin</p>
             {adminNavItems.map((item) => (
               <Link
                 key={item.href}
                 to={item.href}
                 className={cn(
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors',
-                  location.pathname === item.href
+                  location.pathname.startsWith('/admin')
                     ? 'bg-sidebar-primary text-sidebar-primary-foreground'
                     : 'hover:bg-sidebar-accent text-sidebar-foreground'
                 )}

@@ -19,6 +19,12 @@ import Shop from "./pages/Shop";
 import Leaderboard from "./pages/Leaderboard";
 import Logbook from "./pages/Logbook";
 import AdminPanel from "./pages/admin/AdminPanel";
+import AdminPirepsPage from "./pages/admin/AdminPirepsPage";
+import AdminFleetPage from "./pages/admin/AdminFleetPage";
+import AdminRegistrationsPage from "./pages/admin/AdminRegistrationsPage";
+import AdminCareersPage from "./pages/admin/AdminCareersPage";
+import AdminRoutesPage from "./pages/admin/AdminRoutesPage";
+import AdminSettingsPage from "./pages/admin/AdminSettingsPage";
 import PendingApproval from "./pages/PendingApproval";
 import Notams from "./pages/Notams";
 import AeronauticalCharts from "./pages/AeronauticalCharts";
@@ -64,8 +70,16 @@ const App = () => (
               <Route path="/charts" element={<AeronauticalCharts />} />
               <Route path="/type-ratings" element={<Dashboard />} />
               <Route path="/simbrief/callback" element={<SimBriefCallback />} />
+              
+              {/* Admin routes */}
               <Route path="/admin" element={<AdminPanel />} />
-              <Route path="/admin/*" element={<AdminPanel />} />
+              <Route path="/admin/pireps" element={<AdminPirepsPage />} />
+              <Route path="/admin/fleet" element={<AdminFleetPage />} />
+              <Route path="/admin/registrations" element={<AdminRegistrationsPage />} />
+              <Route path="/admin/careers" element={<AdminCareersPage />} />
+              <Route path="/admin/routes" element={<AdminRoutesPage />} />
+              <Route path="/admin/settings" element={<AdminSettingsPage />} />
+              
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

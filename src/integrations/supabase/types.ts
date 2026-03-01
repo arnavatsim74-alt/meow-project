@@ -160,31 +160,58 @@ export type Database = {
       }
       career_requests: {
         Row: {
+          departure_base: string | null
           id: string
           notes: string | null
           requested_at: string
           reviewed_at: string | null
           reviewed_by: string | null
+          routing_rule: string | null
           status: string
           user_id: string
         }
         Insert: {
+          departure_base?: string | null
           id?: string
           notes?: string | null
           requested_at?: string
           reviewed_at?: string | null
           reviewed_by?: string | null
+          routing_rule?: string | null
           status?: string
           user_id: string
         }
         Update: {
+          departure_base?: string | null
           id?: string
           notes?: string | null
           requested_at?: string
           reviewed_at?: string | null
           reviewed_by?: string | null
+          routing_rule?: string | null
           status?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      departure_bases: {
+        Row: {
+          created_at: string
+          icao_code: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          icao_code: string
+          id?: string
+          name?: string
+        }
+        Update: {
+          created_at?: string
+          icao_code?: string
+          id?: string
+          name?: string
         }
         Relationships: []
       }
@@ -497,7 +524,9 @@ export type Database = {
           flight_number: string
           id: string
           lmt: string | null
+          rank_required: string | null
           remarks: string | null
+          route_type: string | null
         }
         Insert: {
           aircraft?: string | null
@@ -512,7 +541,9 @@ export type Database = {
           flight_number: string
           id?: string
           lmt?: string | null
+          rank_required?: string | null
           remarks?: string | null
+          route_type?: string | null
         }
         Update: {
           aircraft?: string | null
@@ -527,7 +558,9 @@ export type Database = {
           flight_number?: string
           id?: string
           lmt?: string | null
+          rank_required?: string | null
           remarks?: string | null
+          route_type?: string | null
         }
         Relationships: []
       }
