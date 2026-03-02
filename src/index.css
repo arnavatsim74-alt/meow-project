@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* Aeroflot Virtual Career Design System
-   Dark theme with proper contrast
+   Aviation EFB Dark Theme - Infinite Flight Inspired
 */
 
 @layer base {
@@ -18,8 +18,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 220 25% 12%;
 
-    --primary: 220 80% 55%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 190 80% 50%;
+    --primary-foreground: 220 25% 10%;
 
     --secondary: 220 15% 90%;
     --secondary-foreground: 220 25% 12%;
@@ -44,79 +44,79 @@
 
     --border: 220 15% 88%;
     --input: 220 15% 88%;
-    --ring: 220 80% 55%;
+    --ring: 190 80% 50%;
 
     --radius: 0.75rem;
 
     --sidebar-background: 220 20% 98%;
     --sidebar-foreground: 220 25% 15%;
-    --sidebar-primary: 220 80% 55%;
-    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-primary: 190 80% 50%;
+    --sidebar-primary-foreground: 220 25% 10%;
     --sidebar-accent: 220 15% 93%;
     --sidebar-accent-foreground: 220 25% 15%;
     --sidebar-border: 220 15% 88%;
-    --sidebar-ring: 220 80% 55%;
+    --sidebar-ring: 190 80% 50%;
 
-    --va-blue: 220 80% 55%;
+    --va-blue: 190 80% 50%;
     --va-dark: 220 20% 98%;
     --va-card: 0 0% 100%;
     --va-border: 220 15% 88%;
-    --va-gold: 220 80% 55%;
+    --va-gold: 190 80% 50%;
   }
 
   .dark {
-    /* Dark theme - proper contrast */
-    --background: 220 25% 10%;
-    --foreground: 210 20% 95%;
+    /* Aviation EFB Dark Theme - Deep Navy */
+    --background: 220 35% 8%;
+    --foreground: 210 20% 92%;
 
-    --card: 220 25% 14%;
-    --card-foreground: 210 20% 95%;
+    --card: 215 30% 10%;
+    --card-foreground: 210 20% 92%;
 
-    --popover: 220 25% 14%;
-    --popover-foreground: 210 20% 95%;
+    --popover: 215 30% 12%;
+    --popover-foreground: 210 20% 92%;
 
-    --primary: 220 80% 55%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 185 80% 55%;
+    --primary-foreground: 220 25% 8%;
 
-    --secondary: 220 25% 18%;
-    --secondary-foreground: 210 20% 95%;
+    --secondary: 215 25% 15%;
+    --secondary-foreground: 210 20% 92%;
 
-    --muted: 220 20% 20%;
-    --muted-foreground: 210 15% 60%;
+    --muted: 215 25% 14%;
+    --muted-foreground: 210 15% 55%;
 
-    --accent: 160 70% 45%;
+    --accent: 160 65% 45%;
     --accent-foreground: 0 0% 100%;
 
-    --success: 160 70% 45%;
+    --success: 160 65% 45%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 45 90% 50%;
-    --warning-foreground: 20 10% 8%;
+    --warning: 45 85% 55%;
+    --warning-foreground: 20 10% 10%;
 
-    --info: 200 85% 55%;
-    --info-foreground: 0 0% 100%;
+    --info: 195 80% 55%;
+    --info-foreground: 220 25% 8%;
 
     --destructive: 0 70% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 20% 22%;
-    --input: 220 20% 22%;
-    --ring: 220 80% 55%;
+    --border: 215 25% 18%;
+    --input: 215 25% 18%;
+    --ring: 185 80% 55%;
 
-    --sidebar-background: 220 30% 12%;
-    --sidebar-foreground: 210 20% 90%;
-    --sidebar-primary: 220 80% 55%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 30% 18%;
-    --sidebar-accent-foreground: 210 20% 90%;
-    --sidebar-border: 220 25% 20%;
-    --sidebar-ring: 220 80% 55%;
+    --sidebar-background: linear-gradient(180deg, #0d1f33 0%, #0a1628 100%);
+    --sidebar-foreground: 210 18% 85%;
+    --sidebar-primary: 185 80% 55%;
+    --sidebar-primary-foreground: 220 25% 8%;
+    --sidebar-accent: 215 25% 16%;
+    --sidebar-accent-foreground: 210 18% 85%;
+    --sidebar-border: 215 25% 20%;
+    --sidebar-ring: 185 80% 55%;
 
-    --va-blue: 220 80% 55%;
-    --va-dark: 220 30% 12%;
-    --va-card: 220 25% 14%;
-    --va-border: 220 20% 22%;
-    --va-gold: 220 80% 55%;
+    --va-blue: 185 80% 55%;
+    --va-dark: 215 30% 10%;
+    --va-card: 215 30% 12%;
+    --va-border: 215 25% 18%;
+    --va-gold: 185 80% 55%;
   }
 }
 
@@ -132,17 +132,18 @@
 
   /* Custom scrollbar */
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
   }
 
   ::-webkit-scrollbar-track {
     background: hsl(var(--muted));
+    border-radius: 3px;
   }
 
   ::-webkit-scrollbar-thumb {
     background: hsl(var(--border));
-    border-radius: 4px;
+    border-radius: 3px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
@@ -151,51 +152,138 @@
 }
 
 @layer components {
-  /* VA Card with clean border */
+  /* VA Card - Glassmorphism EFB Style */
   .va-card {
-    @apply bg-card border border-border rounded-xl p-4 shadow-sm;
+    @apply bg-card border border-border rounded-xl p-4;
+    background: linear-gradient(135deg, hsl(var(--card)) 0%, hsl(215 25% 11%) 100%);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.02);
   }
 
   /* VA Stat Card */
   .va-stat-card {
     @apply bg-card border border-border rounded-xl p-4;
+    background: linear-gradient(135deg, hsl(var(--card)) 0%, hsl(215 25% 11%) 100%);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Glass card for EFB panels */
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-sm border border-border/50 rounded-xl;
+    background: linear-gradient(135deg, rgba(30, 50, 70, 0.6) 0%, rgba(20, 35, 50, 0.6) 100%);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  /* Cyan glow text */
+  .text-glow-cyan {
+    color: hsl(var(--primary));
+    text-shadow: 0 0 10px hsl(var(--primary) / 0.5);
   }
 
   /* Blue gradient text */
   .text-gradient-blue {
-    background: linear-gradient(135deg, hsl(220 80% 55%), hsl(200 85% 55%));
+    background: linear-gradient(135deg, hsl(185 80% 55%), hsl(200 85% 55%));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
-  /* Status badges */
+  /* Primary gradient background */
+  .bg-gradient-primary {
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(200 85% 45%) 100%);
+  }
+
+  /* Panel header style */
+  .panel-header {
+    @apply px-4 py-2 border-b border-border/50;
+    background: linear-gradient(90deg, hsl(var(--primary) / 0.1) 0%, transparent 100%);
+  }
+
+  /* Status badges - EFB style */
   .status-pending {
-    @apply bg-warning/10 text-warning border border-warning/20 px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply bg-warning/15 text-warning border border-warning/25 px-2.5 py-0.5 rounded-md text-xs font-medium;
   }
 
   .status-approved {
-    @apply bg-success/10 text-success border border-success/20 px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply bg-success/15 text-success border border-success/25 px-2.5 py-0.5 rounded-md text-xs font-medium;
   }
 
   .status-rejected {
-    @apply bg-destructive/10 text-destructive border border-destructive/20 px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply bg-destructive/15 text-destructive border border-destructive/25 px-2.5 py-0.5 rounded-md text-xs font-medium;
   }
 
   .status-completed {
-    @apply bg-success/10 text-success border border-success/20 px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply bg-success/15 text-success border border-success/25 px-2.5 py-0.5 rounded-md text-xs font-medium;
   }
 
   .status-assigned {
-    @apply bg-info/10 text-info border border-info/20 px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply bg-info/15 text-info border border-info/25 px-2.5 py-0.5 rounded-md text-xs font-medium;
   }
 
   .status-awaiting {
-    @apply bg-warning/10 text-warning border border-warning/20 px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply bg-warning/15 text-warning border border-warning/25 px-2.5 py-0.5 rounded-md text-xs font-medium;
   }
 
   .status-active {
-    @apply bg-success/10 text-success border border-success/20 px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply bg-success/15 text-success border border-success/25 px-2.5 py-0.5 rounded-md text-xs font-medium;
+  }
+
+  /* Navigation item - EFB style */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200;
+  }
+
+  .nav-item-active {
+    @apply bg-primary/15 text-primary border-l-2 border-primary;
+    box-shadow: inset 0 0 10px hsl(var(--primary) / 0.1);
+  }
+
+  .nav-item-inactive {
+    @apply text-muted-foreground hover:text-foreground hover:bg-muted/50;
+  }
+
+  /* Button primary - glow effect */
+  .btn-glow {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90;
+    box-shadow: 0 0 15px hsl(var(--primary) / 0.3);
+  }
+
+  /* Input - EFB style */
+  .input-efb {
+    @apply bg-muted/50 border-border focus:border-primary focus:ring-primary;
+    background: linear-gradient(135deg, hsl(var(--input)) 0%, hsl(var(--muted)) 100%);
+  }
+
+  /* Table - EFB style */
+  .table-efb {
+    @apply w-full text-sm;
+  }
+
+  .table-efb th {
+    @apply px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider border-b border-border/50;
+    background: linear-gradient(180deg, hsl(var(--muted)) 0%, transparent 100%);
+  }
+
+  .table-efb td {
+    @apply px-3 py-3 border-b border-border/30;
+  }
+
+  .table-efb tr:hover td {
+    @apply bg-muted/30;
+  }
+
+  /* Section card - EFB panel */
+  .section-card {
+    @apply bg-card border border-border rounded-xl overflow-hidden;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  }
+
+  .section-card-header {
+    @apply px-4 py-3 border-b border-border/50 flex items-center gap-2;
+    background: linear-gradient(90deg, hsl(var(--primary) / 0.08) 0%, transparent 100%);
+  }
+
+  .section-card-body {
+    @apply p-4;
   }
 }
 
@@ -214,5 +302,29 @@
 
   .border-va-border {
     border-color: hsl(var(--va-border));
+  }
+
+  /* Glow utilities */
+  .glow-cyan {
+    box-shadow: 0 0 20px hsl(185 80% 55% / 0.3);
+  }
+
+  .glow-cyan-sm {
+    box-shadow: 0 0 10px hsl(185 80% 55% / 0.2);
+  }
+
+  /* Gradient backgrounds */
+  .bg-navy-dark {
+    background: linear-gradient(180deg, #0c1929 0%, #0a1525 100%);
+  }
+
+  .bg-navy-card {
+    background: linear-gradient(135deg, #0f2137 0%, #0d1a2d 100%);
+  }
+
+  /* Subtle border */
+  .border-glow {
+    border: 1px solid hsl(var(--border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
 }

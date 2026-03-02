@@ -23,151 +23,123 @@ interface TooltipData {
   component: number;
   componentType: 'headwind' | 'tailwind' | 'crosswind';
   crosswind: number;
-  x: number;
-  y: number;
 }
 
+const CRUISE_LEVEL = 340;
+
 export function EnrouteWindsProfile({ navlog, cruiseAltitude = 350 }: EnrouteWindsProfileProps) {
-  const [hoveredWaypoint, setHoveredWaypoint] = useState<TooltipData | null>(null);
+  const [hoveredWaypoint, setHoveredWaypoint] = useState<WaypointData | null>(null);
 
-  const totalDistance = useMemo(() => {
-    const lastFix = navlog[navlog.length - 1];
-    return lastFix ? parseFloat(lastFix.distance) || 0 : 0;
-  }, [navlog]);
-
-  const waypoints = useMemo<WaypointData[]>(() => {
-    return navlog
-      .filter(fix => {
-        const alt = parseInt(fix.altitude_feet) || 0;
-        return alt >= 1000; // Filter out taxi/ground waypoints
-      })
-      .map(fix => ({
-        ident: fix.ident,
-        distance: parseFloat(fix.distance) || 0,
-        altitude: Math.round((parseInt(fix.altitude_feet) || 0) / 100) * 100,
-        windDir: parseInt(fix.wind_dir) || 0,
-        windSpeed: parseInt(fix.wind_spd) || 0,
-        track: parseFloat(fix.track_true) || parseFloat(fix.track_mag) || 0,
-      }));
-  }, [navlog]);
-
-  const flightPath = useMemo(() => {
-    if (waypoints.length === 0) return [];
-
-    // Create smooth flight path points
-    const points: { x: number; y: number; altitude: number }[] = [];
-    
-    // Add ground point
-    points.push({ x: 0, y: 100, altitude: 0 });
-
-    // Group waypoints by altitude segments
-    const climbEnd = waypoints.find(w => w.altitude >= cruiseAltitude - 1000);
-    const descentStartIndex = [...waypoints].reverse().findIndex(w => w.altitude < cruiseAltitude - 2000);
-
-    waypoints.forEach((wp, idx) => {
-      const x = (wp.distance / totalDistance) * 100;
-      const y = 100 - (wp.altitude / 400) * 80;
-      points.push({ x, y, altitude: wp.altitude });
+  const { totalDistance, waypoints, climbWaypoints, cruiseWaypoints, descentWaypoints } = useMemo(() => {
+    const filtered = navlog.filter(fix => {
+      const alt = parseInt(fix.altitude_feet) || 0;
+      return alt >= 1000;
     });
 
-    // Add destination
-    const lastWp = waypoints[waypoints.length - 1];
-    if (lastWp) {
-      points.push({ x: 100, y: 100, altitude: 0 });
-    }
+    const wpData = filtered.map(fix => ({
+      ident: fix.ident,
+      distance: parseFloat(fix.distance) || 0,
+      altitude: Math.round((parseInt(fix.altitude_feet) || 0) / 100) * 100,
+      windDir: parseInt(fix.wind_dir) || 0,
+      windSpeed: parseInt(fix.wind_spd) || 0,
+      track: parseFloat(fix.track_true) || parseFloat(fix.track_mag) || 0,
+    }));
 
-    return points;
-  }, [waypoints, totalDistance, cruiseAltitude]);
+    const last = wpData[wpData.length - 1];
+    const total = last ? last.distance : 0;
+
+    const climb = wpData.filter(w => w.altitude < CRUISE_LEVEL - 5000);
+    const cruise = wpData.filter(w => w.altitude >= CRUISE_LEVEL - 5000 && w.altitude <= CRUISE_LEVEL + 2000);
+    const descent = wpData.filter(w => w.altitude < CRUISE_LEVEL - 5000 && w.distance > total * 0.7);
+
+    return { totalDistance: total, waypoints: wpData, climbWaypoints: climb, cruiseWaypoints: cruise, descentWaypoints: descent };
+  }, [navlog]);
 
   const calculateWindComponent = (windDir: number, windSpeed: number, track: number): { headwind: number; crosswind: number } => {
     if (windSpeed === 0) return { headwind: 0, crosswind: 0 };
-    
     let relativeAngle = windDir - track;
     while (relativeAngle > 180) relativeAngle -= 360;
     while (relativeAngle < -180) relativeAngle += 360;
-    
     const radians = (relativeAngle * Math.PI) / 180;
     const headwind = Math.round(windSpeed * Math.cos(radians));
     const crosswind = Math.round(windSpeed * Math.sin(radians));
-    
     return { headwind, crosswind };
   };
 
-  const getWindArrowColor = (headwind: number, crosswind: number): string => {
+  const getWindColor = (headwind: number, crosswind: number): string => {
     const absCrosswind = Math.abs(crosswind);
-    if (absCrosswind > Math.abs(headwind) * 0.7) return 'yellow';
+    if (absCrosswind > Math.abs(headwind) * 0.6) return 'yellow';
     return headwind >= 0 ? 'green' : 'red';
   };
 
-  const cruiseWaypoints = waypoints.filter(w => w.altitude >= cruiseAltitude - 5000 && w.altitude <= cruiseAltitude + 2000);
-
-  // Chart dimensions
-  const width = 900;
-  const height = 320;
-  const padding = { top: 50, right: 30, bottom: 50, left: 70 };
+  const width = 1000;
+  const height = 280;
+  const padding = { top: 40, right: 40, bottom: 35, left: 55 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
   const scaleX = (dist: number) => padding.left + (dist / totalDistance) * chartWidth;
   const scaleY = (alt: number) => padding.top + chartHeight - (alt / 400) * chartHeight;
 
-  // Generate path for flight profile
-  const flightPathD = flightPath.length > 0
-    ? `M ${flightPath.map(p => `${scaleX(p.x * totalDistance / 100)},${scaleY(p.altitude)}`).join(' L ')}`
-    : '';
+  const climbStartX = padding.left;
+  const climbEndX = scaleX(climbWaypoints[climbWaypoints.length - 1]?.distance || totalDistance * 0.15);
+  const cruiseStartX = climbEndX;
+  const cruiseEndX = scaleX(totalDistance * 0.75);
+  const descentStartX = cruiseEndX;
+  const descentEndX = width - padding.right;
+
+  const cruiseY = scaleY(CRUISE_LEVEL);
 
   return (
     <div className="relative overflow-hidden rounded-xl" style={{
-      background: 'linear-gradient(135deg, #0a1628 0%, #0f2744 50%, #0d2137 100%)',
-      boxShadow: '0 0 40px rgba(6, 182, 212, 0.1), inset 0 1px 0 rgba(255,255,255,0.05)'
+      background: 'linear-gradient(180deg, #0c1929 0%, #0f2137 50%, #0a1525 100%)',
+      boxShadow: '0 4px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.03)'
     }}>
       {/* Header */}
-      <div className="absolute top-0 left-0 right-0 px-4 py-3 border-b border-cyan-500/20" style={{
-        background: 'linear-gradient(90deg, rgba(6, 182, 212, 0.15) 0%, transparent 100%)'
+      <div className="absolute top-0 left-0 right-0 h-8 flex items-center px-4" style={{
+        background: 'linear-gradient(90deg, rgba(6, 182, 212, 0.12) 0%, transparent 100%)',
+        borderBottom: '1px solid rgba(6, 182, 212, 0.15)'
       }}>
-        <h3 className="text-sm font-bold tracking-wider text-cyan-400 uppercase" style={{
-          textShadow: '0 0 10px rgba(6, 182, 212, 0.5)'
-        }}>
+        <span className="text-[11px] font-semibold tracking-[0.15em] uppercase text-cyan-400/80">
           EN-ROUTE WINDS PROFILE
-        </h3>
+        </span>
       </div>
 
-      <svg width={width} height={height} className="mt-10">
+      <svg width={width} height={height} className="mt-8">
         <defs>
-          <linearGradient id="flightPathGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.3" />
-            <stop offset="50%" stopColor="#06b6d4" stopOpacity="1" />
-            <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.3" />
+          <linearGradient id="cyanGlow" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.8" />
+            <stop offset="50%" stopColor="#06b6d4" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
           </linearGradient>
-          <filter id="glow">
-            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+          <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="2" result="blur" />
             <feMerge>
-              <feMergeNode in="coloredBlur"/>
-              <feMergeNode in="SourceGraphic"/>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
-          <filter id="tooltipGlow">
-            <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+          <filter id="arrowGlow" x="-100%" y="-100%" width="300%" height="300%">
+            <feGaussianBlur stdDeviation="1.5" result="blur" />
             <feMerge>
-              <feMergeNode in="coloredBlur"/>
-              <feMergeNode in="SourceGraphic"/>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
         </defs>
 
-        {/* Grid lines - horizontal */}
+        {/* Horizontal grid lines */}
         {[0, 100, 200, 300, 400].map(alt => (
-          <g key={`h-grid-${alt}`}>
-            <line
-              x1={padding.left}
-              y1={scaleY(alt)}
-              x2={width - padding.right}
-              y2={scaleY(alt)}
-              stroke="rgba(100, 200, 255, 0.08)"
-              strokeWidth="1"
-              strokeDasharray="4 4"
-            />
-          </g>
+          <line
+            key={alt}
+            x1={padding.left}
+            y1={scaleY(alt)}
+            x2={width - padding.right}
+            y2={scaleY(alt)}
+            stroke="rgba(100, 150, 200, 0.08)"
+            strokeWidth="1"
+            strokeDasharray="3 4"
+          />
         ))}
 
         {/* Y-axis labels */}
@@ -179,226 +151,178 @@ export function EnrouteWindsProfile({ navlog, cruiseAltitude = 350 }: EnrouteWin
           { label: 'FL400', alt: 40000 }
         ].map(item => (
           <text
-            key={`y-label-${item.alt}`}
-            x={padding.left - 10}
+            key={item.alt}
+            x={padding.left - 8}
             y={scaleY(item.alt / 100)}
             textAnchor="end"
             dominantBaseline="middle"
-            className="text-[10px] fill-slate-400 font-mono"
+            className="text-[9px] fill-slate-500 font-mono"
           >
             {item.label}
           </text>
         ))}
 
         {/* X-axis labels */}
-        {[0, 500, 1000, 1500, 2000, 2500].filter(d => d <= totalDistance + 100).map(dist => (
-          <text
-            key={`x-label-${dist}`}
-            x={scaleX(dist)}
-            y={height - padding.bottom + 20}
-            textAnchor="middle"
-            className="text-[10px] fill-slate-400 font-mono"
-          >
-            {dist} NM
-          </text>
-        ))}
+        <text
+          x={padding.left}
+          y={height - 8}
+          textAnchor="start"
+          className="text-[9px] fill-slate-500 font-mono"
+        >
+          0 NM
+        </text>
+        <text
+          x={width - padding.right}
+          y={height - 8}
+          textAnchor="end"
+          className="text-[9px] fill-slate-500 font-mono"
+        >
+          {Math.round(totalDistance)} NM
+        </text>
 
-        {/* Flight path line */}
-        {flightPathD && (
-          <path
-            d={flightPathD}
-            fill="none"
-            stroke="url(#flightPathGradient)"
-            strokeWidth="3"
-            strokeLinecap="round"
-            filter="url(#glow)"
-            className="opacity-90"
-          />
-        )}
+        {/* Climb line - thin vertical cyan */}
+        <line
+          x1={climbStartX}
+          y1={scaleY(0)}
+          x2={climbStartX}
+          y2={scaleY(CRUISE_LEVEL)}
+          stroke="url(#cyanGlow)"
+          strokeWidth="1.5"
+          filter="url(#softGlow)"
+        />
 
-        {/* Wind arrows along cruise segment */}
-        {cruiseWaypoints.slice(1, -1).map((wp, idx) => {
+        {/* Descent line - thin vertical cyan */}
+        <line
+          x1={descentEndX}
+          y1={scaleY(CRUISE_LEVEL)}
+          x2={descentEndX}
+          y2={scaleY(0)}
+          stroke="url(#cyanGlow)"
+          strokeWidth="1.5"
+          filter="url(#softGlow)"
+        />
+
+        {/* Cruise band - horizontal line */}
+        <line
+          x1={cruiseStartX}
+          y1={cruiseY}
+          x2={cruiseEndX}
+          y2={cruiseY}
+          stroke="rgba(6, 182, 212, 0.25)"
+          strokeWidth="1"
+          strokeDasharray="6 4"
+        />
+
+        {/* Climb waypoints */}
+        {climbWaypoints.filter((_, i) => i % 2 === 0).map((wp, idx) => {
           const x = scaleX(wp.distance);
           const y = scaleY(wp.altitude / 100);
-          const { headwind, crosswind } = calculateWindComponent(wp.windDir, wp.windSpeed, wp.track);
-          const color = getWindArrowColor(headwind, crosswind);
-          const colorMap: Record<string, string> = {
-            green: '#22c55e',
-            red: '#ef4444',
-            yellow: '#eab308'
-          };
-
           return (
-            <g 
-              key={`wind-${idx}`} 
-              className="cursor-pointer"
-              onMouseEnter={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setHoveredWaypoint({
-                  ident: wp.ident,
-                  altitude: wp.altitude,
-                  windDir: wp.windDir,
-                  windSpeed: wp.windSpeed,
-                  component: Math.abs(headwind) > Math.abs(crosswind) ? headwind : crosswind,
-                  componentType: Math.abs(crosswind) > Math.abs(headwind) * 0.7 ? 'crosswind' : (headwind >= 0 ? 'headwind' : 'tailwind'),
-                  crosswind,
-                  x: rect.left + rect.width / 2,
-                  y: rect.top
-                });
-              }}
-              onMouseLeave={() => setHoveredWaypoint(null)}
-            >
-              {/* Wind arrow */}
-              <line
-                x1={x - 12}
-                y1={y - 25}
-                x2={x + 12}
-                y2={y - 25}
-                stroke={colorMap[color]}
-                strokeWidth="2"
-                strokeLinecap="round"
-                opacity="0.9"
-              />
-              <polygon
-                points={`${x + 12},${y - 25} ${x + 6},${y - 29} ${x + 6},${y - 21}`}
-                fill={colorMap[color]}
-                opacity="0.9"
-              />
-              {/* Wind speed label */}
-              <text
-                x={x}
-                y={y - 35}
-                textAnchor="middle"
-                className="text-[9px] font-bold font-mono"
-                fill={colorMap[color]}
-                style={{ textShadow: `0 0 4px ${colorMap[color]}` }}
-              >
-                {wp.windSpeed}
-              </text>
+            <g key={`climb-${idx}`} className="cursor-pointer" onMouseEnter={() => setHoveredWaypoint(wp)} onMouseLeave={() => setHoveredWaypoint(null)}>
+              <circle cx={x} cy={y} r="3" fill="rgba(6, 182, 212, 0.6)" filter="url(#softGlow)" />
             </g>
           );
         })}
 
-        {/* Waypoint nodes */}
-        {waypoints.map((wp, idx) => {
+        {/* Cruise waypoints - main waypoints */}
+        {cruiseWaypoints.filter((wp, i) => i === 0 || i === cruiseWaypoints.length - 1 || wp.ident.length <= 5).map((wp, idx) => {
+          const x = scaleX(wp.distance);
+          const y = cruiseY;
+          return (
+            <g key={`cruise-${idx}`} className="cursor-pointer" onMouseEnter={() => setHoveredWaypoint(wp)} onMouseLeave={() => setHoveredWaypoint(null)}>
+              <circle cx={x} cy={y} r="4" fill="#06b6d4" filter="url(#softGlow)" />
+              <text x={x} y={y + 14} textAnchor="middle" className="text-[7px] fill-slate-400 font-mono">{wp.ident}</text>
+            </g>
+          );
+        })}
+
+        {/* Descent waypoints */}
+        {descentWaypoints.filter((_, i) => i % 2 === 0).map((wp, idx) => {
           const x = scaleX(wp.distance);
           const y = scaleY(wp.altitude / 100);
-          const isMajor = idx % 5 === 0 || idx === waypoints.length - 1 || idx === 0;
+          return (
+            <g key={`descent-${idx}`} className="cursor-pointer" onMouseEnter={() => setHoveredWaypoint(wp)} onMouseLeave={() => setHoveredWaypoint(null)}>
+              <circle cx={x} cy={y} r="3" fill="rgba(6, 182, 212, 0.6)" filter="url(#softGlow)" />
+            </g>
+          );
+        })}
+
+        {/* Destination marker */}
+        <g className="cursor-pointer" onMouseEnter={() => setHoveredWaypoint(waypoints[waypoints.length - 1])} onMouseLeave={() => setHoveredWaypoint(null)}>
+          <circle cx={descentEndX} cy={scaleY(0)} r="4" fill="#06b6d4" filter="url(#softGlow)" />
+          <text x={descentEndX} y={scaleY(0) - 8} textAnchor="middle" className="text-[7px] fill-slate-400 font-mono">{waypoints[waypoints.length - 1]?.ident}</text>
+        </g>
+
+        {/* Wind arrows - only in cruise */}
+        {cruiseWaypoints.slice(1, -1).filter((_, i) => i % 2 === 0).map((wp, idx) => {
+          const x = scaleX(wp.distance);
+          const y = cruiseY - 20;
+          const { headwind, crosswind } = calculateWindComponent(wp.windDir, wp.windSpeed, wp.track);
+          const color = getWindColor(headwind, crosswind);
+          const colorMap: Record<string, string> = { green: '#22c55e', red: '#ef4444', yellow: '#eab308' };
+
+          if (wp.windSpeed < 5) return null;
 
           return (
-            <g 
-              key={`wp-${idx}`}
-              className="cursor-pointer"
-              onMouseEnter={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const { headwind, crosswind } = calculateWindComponent(wp.windDir, wp.windSpeed, wp.track);
-                setHoveredWaypoint({
-                  ident: wp.ident,
-                  altitude: wp.altitude,
-                  windDir: wp.windDir,
-                  windSpeed: wp.windSpeed,
-                  component: Math.abs(headwind) > Math.abs(crosswind) ? headwind : crosswind,
-                  componentType: Math.abs(crosswind) > Math.abs(headwind) * 0.7 ? 'crosswind' : (headwind >= 0 ? 'headwind' : 'tailwind'),
-                  crosswind,
-                  x: rect.left + rect.width / 2,
-                  y: rect.top
-                });
-              }}
-              onMouseLeave={() => setHoveredWaypoint(null)}
-            >
-              <circle
-                cx={x}
-                cy={y}
-                r={isMajor ? 5 : 3}
-                fill={isMajor ? '#06b6d4' : 'rgba(6, 182, 212, 0.5)'}
-                stroke={isMajor ? '#0891b2' : 'rgba(6, 182, 212, 0.3)'}
-                strokeWidth="1"
-              />
-              {/* Waypoint label for major waypoints */}
-              {isMajor && (
-                <text
-                  x={x}
-                  y={y + 16}
-                  textAnchor="middle"
-                  className="text-[8px] fill-slate-300 font-mono"
-                >
-                  {wp.ident}
-                </text>
-              )}
+            <g key={`wind-${idx}`} className="cursor-pointer" onMouseEnter={() => setHoveredWaypoint(wp)} onMouseLeave={() => setHoveredWaypoint(null)}>
+              <line x1={x - 10} y1={y} x2={x + 10} y2={y} stroke={colorMap[color]} strokeWidth="1.5" strokeLinecap="round" filter="url(#arrowGlow)" />
+              <polygon points={`${x+10},${y} ${x+5},${y-3} ${x+5},${y+3}`} fill={colorMap[color]} filter="url(#arrowGlow)" />
+              <text x={x} y={y - 6} textAnchor="middle" className="text-[7px] font-bold font-mono" fill={colorMap[color]}>{wp.windSpeed}</text>
             </g>
           );
         })}
       </svg>
 
       {/* Legend */}
-      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-4 px-4 py-2 rounded-full" style={{
-        background: 'rgba(0, 20, 40, 0.8)',
-        border: '1px solid rgba(100, 200, 255, 0.15)'
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-4 px-5 py-1.5 rounded-full" style={{
+        background: 'rgba(15, 30, 50, 0.7)',
+        backdropFilter: 'blur(8px)',
+        border: '1px solid rgba(100, 150, 200, 0.12)',
+        boxShadow: '0 2px 12px rgba(0, 0, 0, 0.3)'
       }}>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm bg-green-500" />
-          <span className="text-[10px] text-slate-300 font-medium">HEADWIND</span>
+          <div className="w-2 h-2 rounded-full bg-green-500" />
+          <span className="text-[9px] text-slate-400 font-medium">HEADWIND</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm bg-red-500" />
-          <span className="text-[10px] text-slate-300 font-medium">TAILWIND</span>
+          <div className="w-2 h-2 rounded-full bg-red-500" />
+          <span className="text-[9px] text-slate-400 font-medium">TAILWIND</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm bg-yellow-500" />
-          <span className="text-[10px] text-slate-300 font-medium">CROSSWIND</span>
+          <div className="w-2 h-2 rounded-full bg-yellow-500" />
+          <span className="text-[9px] text-slate-400 font-medium">CROSSWIND</span>
         </div>
       </div>
 
-      {/* Interactive Tooltip */}
-      {hoveredWaypoint && (
-        <div
-          className="fixed z-50 px-4 py-3 rounded-lg border"
-          style={{
-            left: hoveredWaypoint.x,
-            top: hoveredWaypoint.y - 10,
-            transform: 'translate(-50%, -100%)',
-            background: 'linear-gradient(135deg, #0f2744 0%, #0a1628 100%)',
-            borderColor: 'rgba(6, 182, 212, 0.4)',
-            boxShadow: '0 0 20px rgba(6, 182, 212, 0.2), 0 4px 20px rgba(0,0,0,0.4)',
-            backdropFilter: 'blur(10px)'
-          }}
-          onMouseEnter={() => setHoveredWaypoint(hoveredWaypoint)}
-          onMouseLeave={() => setHoveredWaypoint(null)}
-        >
-          <div className="text-xs font-bold text-cyan-400 mb-2 border-b border-cyan-500/30 pb-1">
-            {hoveredWaypoint.ident}
-          </div>
-          <div className="space-y-1 text-[10px]">
-            <div className="flex justify-between gap-4">
-              <span className="text-slate-400">Altitude:</span>
-              <span className="text-slate-100 font-mono">FL{Math.round(hoveredWaypoint.altitude / 100)}</span>
-            </div>
-            <div className="flex justify-between gap-4">
-              <span className="text-slate-400">Wind:</span>
-              <span className="text-slate-100 font-mono">{hoveredWaypoint.windDir}° / {hoveredWaypoint.windSpeed}kt</span>
-            </div>
-            <div className="flex justify-between gap-4">
-              <span className="text-slate-400">Component:</span>
-              <span className={`font-mono font-bold ${
-                hoveredWaypoint.componentType === 'headwind' ? 'text-green-400' :
-                hoveredWaypoint.componentType === 'tailwind' ? 'text-red-400' :
-                'text-yellow-400'
-              }`}>
-                {hoveredWaypoint.componentType === 'crosswind' ? `Crosswind ${Math.abs(hoveredWaypoint.component)}kt` : 
-                 `${hoveredWaypoint.component > 0 ? '' : '-'}${Math.abs(hoveredWaypoint.component)}kt ${hoveredWaypoint.componentType === 'headwind' ? 'headwind' : 'tailwind'}`}
-              </span>
-            </div>
-            <div className="flex justify-between gap-4">
-              <span className="text-slate-400">Crosswind:</span>
-              <span className="text-yellow-400 font-mono">{hoveredWaypoint.crosswind}kt</span>
-            </div>
-          </div>
-          {/* Arrow */}
-          <div className="absolute left-1/2 -translate-x-1/2 bottom-0 -mb-1.5 w-3 h-3 rotate-45" style={{
-            background: '#0f2744',
-            borderRight: '1px solid rgba(6, 182, 212, 0.4)',
-            borderBottom: '1px solid rgba(6, 182, 212, 0.4)'
-          }} />
+      {/* Tooltip */}
+      {hoveredWaypoint && hoveredWaypoint.windSpeed > 0 && (
+        <div className="absolute z-20 px-3 py-2 rounded-lg text-[10px]" style={{
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          background: 'rgba(10, 25, 45, 0.95)',
+          border: '1px solid rgba(6, 182, 212, 0.3)',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5), 0 0 15px rgba(6, 182, 212, 0.1)'
+        }}>
+          <div className="text-cyan-400 font-semibold mb-1">{hoveredWaypoint.ident}</div>
+          <div className="text-slate-400">Alt: <span className="text-slate-200">FL{Math.round(hoveredWaypoint.altitude / 100)}</span></div>
+          <div className="text-slate-400">Wind: <span className="text-slate-200">{hoveredWaypoint.windDir}° / {hoveredWaypoint.windSpeed}kt</span></div>
+          {(() => {
+            const { headwind, crosswind } = calculateWindComponent(hoveredWaypoint.windDir, hoveredWaypoint.windSpeed, hoveredWaypoint.track);
+            const color = getWindColor(headwind, crosswind);
+            const colorMap: Record<string, string> = { green: 'text-green-400', red: 'text-red-400', yellow: 'text-yellow-400' };
+            return (
+              <div className="text-slate-400">
+                {Math.abs(crosswind) > Math.abs(headwind) * 0.6 ? (
+                  <span className={colorMap.yellow}>Crosswind: {crosswind}kt</span>
+                ) : (
+                  <span className={headwind >= 0 ? colorMap.green : colorMap.red}>
+                    {headwind >= 0 ? `Headwind: ${headwind}kt` : `Tailwind: ${Math.abs(headwind)}kt`}
+                  </span>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>

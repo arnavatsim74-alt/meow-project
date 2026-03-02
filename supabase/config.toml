@@ -15,7 +15,7 @@ verify_jwt = false
 [functions.infinite-flight-airport]
 verify_jwt = false
 
-[functions.simbrief-ofp]
+[functions.simbrief-api]
 verify_jwt = false
 
 [functions.import-route-catalog]
