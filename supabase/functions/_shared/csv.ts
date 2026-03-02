@@ -17,7 +17,8 @@ export function parseCsv(csvText: string): string[][] {
   let field = "";
   let inQuotes = false;
 
-  const text = csvText.replace(/^\uFEFF/, ""); // strip BOM
+  // Strip BOM — handles both proper \uFEFF and mis-decoded "ï»¿"
+  const text = csvText.replace(/^\uFEFF/, "").replace(/^ï»¿/, "");
 
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
