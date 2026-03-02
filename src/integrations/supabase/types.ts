@@ -225,6 +225,7 @@ export type Database = {
           dispatch_group_id: string | null
           id: string
           leg_number: number
+          livery: string | null
           route_id: string
           status: string
           tail_number: string | null
@@ -239,6 +240,7 @@ export type Database = {
           dispatch_group_id?: string | null
           id?: string
           leg_number: number
+          livery?: string | null
           route_id: string
           status?: string
           tail_number?: string | null
@@ -253,6 +255,7 @@ export type Database = {
           dispatch_group_id?: string | null
           id?: string
           leg_number?: number
+          livery?: string | null
           route_id?: string
           status?: string
           tail_number?: string | null
@@ -513,52 +516,43 @@ export type Database = {
       route_catalog: {
         Row: {
           aircraft: string | null
-          arr_city: string | null
           arr_icao: string
-          code: string | null
           created_at: string
-          dep_city: string | null
           dep_icao: string
           duration_mins: number | null
           duration_raw: string | null
           flight_number: string
           id: string
+          livery: string | null
           lmt: string | null
-          rank_required: string | null
           remarks: string | null
           route_type: string | null
         }
         Insert: {
           aircraft?: string | null
-          arr_city?: string | null
           arr_icao: string
-          code?: string | null
           created_at?: string
-          dep_city?: string | null
           dep_icao: string
           duration_mins?: number | null
           duration_raw?: string | null
           flight_number: string
           id?: string
+          livery?: string | null
           lmt?: string | null
-          rank_required?: string | null
           remarks?: string | null
           route_type?: string | null
         }
         Update: {
           aircraft?: string | null
-          arr_city?: string | null
           arr_icao?: string
-          code?: string | null
           created_at?: string
-          dep_city?: string | null
           dep_icao?: string
           duration_mins?: number | null
           duration_raw?: string | null
           flight_number?: string
           id?: string
+          livery?: string | null
           lmt?: string | null
-          rank_required?: string | null
           remarks?: string | null
           route_type?: string | null
         }

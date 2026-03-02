@@ -1,0 +1,1 @@
+ALTER TABLE public.dispatch_legs ADD COLUMN IF NOT EXISTS livery text;

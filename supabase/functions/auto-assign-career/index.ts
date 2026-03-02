@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
     // Load route catalog
     const { data: catalog, error: catalogErr } = await admin
       .from("route_catalog")
-      .select("flight_number, dep_icao, arr_icao, aircraft, duration_mins")
+      .select("flight_number, dep_icao, arr_icao, aircraft, duration_mins, livery")
       .limit(5000);
 
     if (catalogErr) throw catalogErr;
@@ -135,6 +135,7 @@ Deno.serve(async (req) => {
           arr_icao: base,
           aircraft: chosenAircraft?.type_code ?? "A320",
           duration_mins: 120,
+          livery: null,
         });
       }
     }
@@ -188,7 +189,7 @@ Deno.serve(async (req) => {
 
     const routeIds = insertedRoutes.map((x) => x.id);
 
-    const legsToInsert = selected.map((_r, idx) => ({
+    const legsToInsert = selected.map((r, idx) => ({
       user_id: userId,
       route_id: routeIds[idx],
       aircraft_id: chosenAircraft!.id,
@@ -199,6 +200,7 @@ Deno.serve(async (req) => {
       assigned_by: null,
       assigned_at: nowIso,
       tail_number: tailNumber,
+      livery: r.livery ?? null,
     }));
 
     const { error: legsErr } = await admin.from("dispatch_legs").insert(legsToInsert);

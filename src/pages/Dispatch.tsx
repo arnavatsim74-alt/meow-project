@@ -20,6 +20,7 @@ interface DispatchLeg {
   tail_number: string | null;
   dispatch_group_id: string | null;
   aircraft_id: string;
+  livery: string | null;
   route: {
     id: string;
     flight_number: string;
@@ -156,6 +157,7 @@ export default function Dispatch() {
         tail_number,
         dispatch_group_id,
         aircraft_id,
+        livery,
         route:routes(id, flight_number, departure_airport, arrival_airport, distance_nm, estimated_time_hrs),
         aircraft:aircraft(name, type_code, family)
       `)
@@ -583,6 +585,7 @@ export default function Dispatch() {
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {leg.route?.distance_nm} NM • {leg.route?.estimated_time_hrs?.toFixed(2)} hrs flight time
+                    {leg.livery && <span className="ml-2 text-primary/80">• {leg.livery}</span>}
                   </p>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">

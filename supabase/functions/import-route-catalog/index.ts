@@ -30,38 +30,43 @@ Deno.serve(async (req) => {
     if (rows.length < 2) return json({ error: "CSV is empty" }, { status: 400 });
 
     const header = rows[0].map(normalizeHeader);
-    const expectedColCount = header.length; // e.g. 8
+    const expectedColCount = header.length;
 
-    // Support both old and new CSV formats
+    // Flexible header matching
     const findIdx = (...names: string[]) => {
       for (const n of names) {
-        const idx = header.indexOf(n.toLowerCase());
+        const norm = n.toLowerCase().trim();
+        const idx = header.indexOf(norm);
+        if (idx >= 0) return idx;
+      }
+      // Fallback: partial match
+      for (const n of names) {
+        const norm = n.toLowerCase().trim();
+        const idx = header.findIndex((h) => h.includes(norm));
         if (idx >= 0) return idx;
       }
       return -1;
     };
 
-    const idxFlight = findIdx("routenumber", "flight number", "flight_number");
-    const idxDepIcao = findIdx("depicao", "dep. icao", "dep_icao");
-    const idxArrIcao = findIdx("arricao", "arr icao", "arr_icao");
+    const idxFlight = findIdx("flight number", "routenumber", "flight_number", "route_number");
+    const idxLivery = findIdx("code", "livery");
+    const idxDepIcao = findIdx("dep. icao", "dep icao", "depicao", "dep_icao", "departure icao");
+    const idxArrIcao = findIdx("arr icao", "arricao", "arr_icao", "arrival icao");
     const idxAircraft = findIdx("aircraft");
-    const idxDuration = findIdx("estflighttime", "duration");
-    const idxRemarks = findIdx("notes", "remarks");
+    const idxDuration = findIdx("duration", "estflighttime");
+    const idxRemarks = findIdx("remarks", "notes");
     const idxRouteType = findIdx("routetype", "route_type");
-    const idxRank = findIdx("rank", "rank_required");
+    const idxLmt = findIdx("lmt");
 
     if (idxFlight < 0 || idxDepIcao < 0 || idxArrIcao < 0) {
-      return json({ error: "CSV headers not recognized. Need routeNumber/depICAO/arrICAO or Flight Number/Dep. ICAO/Arr ICAO" }, { status: 400 });
+      return json({ error: `CSV headers not recognized. Found: [${header.join(", ")}]. Need Flight Number / DEP. ICAO / ARR ICAO columns.` }, { status: 400 });
     }
 
     // Fix rows that have more columns than headers due to unquoted commas in aircraft field
-    // e.g. "FJ139,NFNA,NFNK,B73M, B738,passenger,60,first_officer,notes"
-    // becomes 9 cols instead of 8 — the extra cols belong to aircraft
     const fixedRows = rows.slice(1).map((r) => {
       const extra = r.length - expectedColCount;
       if (extra <= 0 || idxAircraft < 0) return r;
 
-      // Merge extra columns back into the aircraft field
       const fixed = [...r];
       const aircraftParts = fixed.splice(idxAircraft, 1 + extra);
       const mergedAircraft = aircraftParts.join(",");
@@ -81,9 +86,7 @@ Deno.serve(async (req) => {
 
       return {
         flight_number: pick(r, idxFlight),
-        code: null as string | null,
-        dep_city: null as string | null,
-        arr_city: null as string | null,
+        livery: idxLivery >= 0 ? pick(r, idxLivery) || null : null,
         dep_icao: pick(r, idxDepIcao).toUpperCase(),
         arr_icao: pick(r, idxArrIcao).toUpperCase(),
         aircraft: aircraftRaw || null,
@@ -92,7 +95,6 @@ Deno.serve(async (req) => {
         remarks: idxRemarks >= 0 ? pick(r, idxRemarks) : null,
         lmt: null as string | null,
         route_type: idxRouteType >= 0 ? pick(r, idxRouteType).toLowerCase() || "passenger" : "passenger",
-        rank_required: idxRank >= 0 ? pick(r, idxRank).toLowerCase() || "first_officer" : "first_officer",
       };
     }).filter((x) => x.flight_number && x.dep_icao && x.arr_icao);
 
