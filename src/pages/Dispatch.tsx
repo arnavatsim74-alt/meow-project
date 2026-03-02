@@ -227,28 +227,19 @@ export default function Dispatch() {
     setIsRequesting(true);
 
     try {
-      const completedLegs = dispatchLegs.filter(
-        (l) => l.status === 'completed' || l.pirep?.status === 'approved'
-      );
-
+      // Finalize any approved-but-not-completed legs
       const legsToComplete = dispatchLegs
         .filter((l) => l.pirep?.status === 'approved' && l.status !== 'completed')
         .map((l) => l.id);
 
       if (legsToComplete.length > 0) {
-        const { error: completeError } = await supabase
+        await supabase
           .from('dispatch_legs')
           .update({ status: 'completed' })
           .in('id', legsToComplete);
-
-        if (completeError) {
-          console.error('Failed to finalize previous legs:', completeError);
-          toast.error('Failed to finalize previous legs');
-          setIsRequesting(false);
-          return;
-        }
       }
 
+      // Update fleet
       const tailNumber = dispatchLegs[0]?.tail_number;
       const lastLeg = dispatchLegs[dispatchLegs.length - 1];
       const totalFlightHours = dispatchLegs.reduce(
@@ -257,64 +248,44 @@ export default function Dispatch() {
       );
 
       if (tailNumber && lastLeg?.route?.arrival_airport) {
-        const { error: fleetError } = await supabase.rpc('complete_aircraft_flight', {
+        await supabase.rpc('complete_aircraft_flight', {
           p_tail_number: tailNumber,
           p_arrival_airport: lastLeg.route.arrival_airport,
           p_flight_hours: totalFlightHours,
         });
-
-        if (fleetError) {
-          console.error('Failed to update fleet status:', fleetError);
-        }
       }
 
+      // Unlink PIREPs from dispatch legs
       const allLegIds = dispatchLegs.map((l) => l.id);
       if (allLegIds.length > 0) {
-        const { error: nullifyError } = await supabase
+        await supabase
           .from('pireps')
           .update({ dispatch_leg_id: null })
           .in('dispatch_leg_id', allLegIds);
-
-        if (nullifyError) {
-          console.error('Failed to unlink PIREPs:', nullifyError);
-        }
       }
 
-      const { error: deleteLegsError } = await supabase
+      // Delete old dispatch legs
+      await supabase
         .from('dispatch_legs')
         .delete()
         .eq('user_id', user!.id);
 
-      if (deleteLegsError) {
-        console.error('Failed to clear dispatch legs:', deleteLegsError);
-        toast.error('Failed to clear previous assignment: ' + deleteLegsError.message);
-        setIsRequesting(false);
-        return;
-      }
-
-      const { error: deleteRequestsError } = await supabase
+      // Delete old career requests
+      await supabase
         .from('career_requests')
         .delete()
         .eq('user_id', user!.id)
         .in('status', ['approved', 'rejected']);
 
-      if (deleteRequestsError) {
-        console.error('Failed to clear career requests:', deleteRequestsError);
-      }
-
-      const { error: autoAssignError } = await supabase.functions.invoke('auto-assign-career', {
-        body: { departureBase: selectedBase || undefined, routingRule },
-      });
-
-      if (autoAssignError) {
-        throw autoAssignError;
-      }
-
-      toast.success('New vCAREER auto-assigned!');
-      fetchDispatchData();
+      // Reset state to show base/rule selection screen
+      setDispatchLegs([]);
+      setCareerRequest(null);
+      setSelectedBase(departureBases[0]?.icao_code || '');
+      setRoutingRule('return_to_base');
+      toast.success('Career completed! Choose your next departure base and routing rule.');
     } catch (e: any) {
       console.error('requestAnotherCareer error:', e);
-      toast.error(e?.message ?? 'Failed to request new career');
+      toast.error(e?.message ?? 'Failed to reset career');
     } finally {
       setIsRequesting(false);
     }

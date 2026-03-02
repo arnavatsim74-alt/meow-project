@@ -20,7 +20,6 @@ Deno.serve(async (req) => {
 
     const admin = createAdminClient();
 
-    // Check if caller is admin
     const { data: roleRow } = await admin
       .from("user_roles")
       .select("role")
@@ -36,7 +35,6 @@ Deno.serve(async (req) => {
     const departureBase = (body?.departureBase as string) || null;
     const routingRule = (body?.routingRule as string) || "return_to_base";
 
-    // Load profile
     const { data: profile, error: profileErr } = await admin
       .from("profiles")
       .select("callsign, base_airport, active_aircraft_family")
@@ -46,7 +44,6 @@ Deno.serve(async (req) => {
 
     const base = (departureBase || profile?.base_airport || "UUEE").toUpperCase();
 
-    // Choose aircraft
     const { data: fleetPool } = await admin
       .from("virtual_fleet")
       .select("id, tail_number, aircraft_id, aircraft:aircraft(id, family, type_code)")
@@ -84,7 +81,6 @@ Deno.serve(async (req) => {
       chosenAircraft = preferredAircraft ?? pickRandom(aircraftPool);
     }
 
-    // Load route catalog
     const { data: catalog, error: catalogErr } = await admin
       .from("route_catalog")
       .select("flight_number, dep_icao, arr_icao, aircraft, duration_mins")
@@ -94,7 +90,6 @@ Deno.serve(async (req) => {
       return json({ error: "Route catalog is empty. Import routes first." }, { status: 400 });
     }
 
-    // Build route chain with STRICT continuity
     const legsRequested = getRandomInt(2, 5);
     const selected: typeof catalog = [];
     let current = base;
@@ -112,7 +107,6 @@ Deno.serve(async (req) => {
       current = (route.arr_icao ?? "").toUpperCase();
     }
 
-    // Return to base if needed
     if (routingRule === "return_to_base" && current !== base && selected.length > 0) {
       const returnCandidates = catalog.filter(
         (r) => r.dep_icao?.toUpperCase() === current &&
@@ -123,7 +117,7 @@ Deno.serve(async (req) => {
         selected.push(pickRandom(returnCandidates));
       } else {
         selected.push({
-          flight_number: `AFL${getRandomInt(1000, 9999)}`,
+          flight_number: `RTN${getRandomInt(1000, 9999)}`,
           dep_icao: current,
           arr_icao: base,
           aircraft: chosenAircraft?.type_code ?? "A320",

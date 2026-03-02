@@ -30,10 +30,9 @@ Deno.serve(async (req) => {
     if (rows.length < 2) return json({ error: "CSV is empty" }, { status: 400 });
 
     const header = rows[0].map(normalizeHeader);
+    const expectedColCount = header.length; // e.g. 8
 
     // Support both old and new CSV formats
-    // Old: "Flight Number", "Dep. ICAO", "Arr ICAO", "Aircraft", "Duration", "Remarks", etc.
-    // New: "routeNumber", "depICAO", "arrICAO", "aircraft", "routeType", "estFlightTime", "rank", "notes"
     const findIdx = (...names: string[]) => {
       for (const n of names) {
         const idx = header.indexOf(n.toLowerCase());
@@ -43,15 +42,11 @@ Deno.serve(async (req) => {
     };
 
     const idxFlight = findIdx("routenumber", "flight number", "flight_number");
-    const idxCode = findIdx("code");
-    const idxDepCity = findIdx("departure city", "dep_city");
-    const idxArrCity = findIdx("arrival city", "arr_city");
     const idxDepIcao = findIdx("depicao", "dep. icao", "dep_icao");
     const idxArrIcao = findIdx("arricao", "arr icao", "arr_icao");
     const idxAircraft = findIdx("aircraft");
     const idxDuration = findIdx("estflighttime", "duration");
     const idxRemarks = findIdx("notes", "remarks");
-    const idxLmt = findIdx("lmt");
     const idxRouteType = findIdx("routetype", "route_type");
     const idxRank = findIdx("rank", "rank_required");
 
@@ -59,34 +54,43 @@ Deno.serve(async (req) => {
       return json({ error: "CSV headers not recognized. Need routeNumber/depICAO/arrICAO or Flight Number/Dep. ICAO/Arr ICAO" }, { status: 400 });
     }
 
-    const payload = rows.slice(1).map((r) => {
-      // Duration: could be "HH:MM" or just minutes as a number
+    // Fix rows that have more columns than headers due to unquoted commas in aircraft field
+    // e.g. "FJ139,NFNA,NFNK,B73M, B738,passenger,60,first_officer,notes"
+    // becomes 9 cols instead of 8 — the extra cols belong to aircraft
+    const fixedRows = rows.slice(1).map((r) => {
+      const extra = r.length - expectedColCount;
+      if (extra <= 0 || idxAircraft < 0) return r;
+
+      // Merge extra columns back into the aircraft field
+      const fixed = [...r];
+      const aircraftParts = fixed.splice(idxAircraft, 1 + extra);
+      const mergedAircraft = aircraftParts.join(",");
+      fixed.splice(idxAircraft, 0, mergedAircraft);
+      return fixed;
+    });
+
+    const payload = fixedRows.map((r) => {
       const durationRaw = idxDuration >= 0 ? pick(r, idxDuration) : "";
       let durationMins = parseDurationToMinutes(durationRaw);
-      // If not HH:MM format, try as plain minutes number
       if (durationMins === null && durationRaw) {
         const num = Number(durationRaw);
         if (Number.isFinite(num) && num > 0) durationMins = num;
       }
 
-      const lmtRaw = idxLmt >= 0 ? pick(r, idxLmt) : "";
-      const lmt = lmtRaw ? new Date(lmtRaw).toISOString() : null;
-
-      // Aircraft field: could be "A320", "Aeroflot - A320", or "Aeroflot - A320, Air India - B77W"
       const aircraftRaw = idxAircraft >= 0 ? pick(r, idxAircraft) : "";
 
       return {
         flight_number: pick(r, idxFlight),
-        code: idxCode >= 0 ? pick(r, idxCode) : null,
-        dep_city: idxDepCity >= 0 ? pick(r, idxDepCity) : null,
-        arr_city: idxArrCity >= 0 ? pick(r, idxArrCity) : null,
+        code: null as string | null,
+        dep_city: null as string | null,
+        arr_city: null as string | null,
         dep_icao: pick(r, idxDepIcao).toUpperCase(),
         arr_icao: pick(r, idxArrIcao).toUpperCase(),
         aircraft: aircraftRaw || null,
         duration_raw: durationRaw || null,
         duration_mins: durationMins,
         remarks: idxRemarks >= 0 ? pick(r, idxRemarks) : null,
-        lmt: lmt && lmt !== "Invalid Date" ? lmt : null,
+        lmt: null as string | null,
         route_type: idxRouteType >= 0 ? pick(r, idxRouteType).toLowerCase() || "passenger" : "passenger",
         rank_required: idxRank >= 0 ? pick(r, idxRank).toLowerCase() || "first_officer" : "first_officer",
       };

@@ -10,15 +10,15 @@ function getRandomInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-/** Parse aircraft field: "A320", "Aeroflot - A320", "Aeroflot - A320, Air India - B77W" → type codes */
+/** Parse aircraft field: handles plain codes "A320", "B73M, B738", and "Livery - Code" */
 function parseAircraftCodes(raw: string | null): string[] {
   if (!raw) return [];
   return raw.split(",").map((part) => {
     const trimmed = part.trim();
-    // "Livery - Code" format
-    const dashIdx = trimmed.lastIndexOf("-");
-    if (dashIdx > 0) {
-      return trimmed.slice(dashIdx + 1).trim().toUpperCase();
+    // "Livery - Code" format: only split if there's a space-dash-space
+    const dashMatch = trimmed.match(/^.+\s-\s(.+)$/);
+    if (dashMatch) {
+      return dashMatch[1].trim().toUpperCase();
     }
     return trimmed.toUpperCase();
   }).filter(Boolean);
@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
       const candidates = catalog.filter(
         (r) => r.dep_icao?.toUpperCase() === current && !used.has(r.flight_number)
       );
-      if (candidates.length === 0) break; // No routes from current position - stop
+      if (candidates.length === 0) break;
 
       const route = pickRandom(candidates);
       selected.push(route);
@@ -128,9 +128,9 @@ Deno.serve(async (req) => {
       if (returnCandidates.length > 0) {
         selected.push(pickRandom(returnCandidates));
       } else {
-        // Synthetic return
+        // Synthetic return leg
         selected.push({
-          flight_number: `AFL${getRandomInt(1000, 9999)}`,
+          flight_number: `RTN${getRandomInt(1000, 9999)}`,
           dep_icao: current,
           arr_icao: base,
           aircraft: chosenAircraft?.type_code ?? "A320",
