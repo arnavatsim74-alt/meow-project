@@ -94,7 +94,7 @@ export default function Dashboard() {
     if (data) setRecentPireps(data);
   };
 
-  if (loading || !user || (user && !profile)) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Plane className="h-8 w-8 animate-pulse text-primary" />
@@ -103,6 +103,14 @@ export default function Dashboard() {
   }
 
   if (!user) return <Navigate to="/auth" replace />;
+  
+  if (!profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Plane className="h-8 w-8 animate-pulse text-primary" />
+      </div>
+    );
+  }
   
   if (profile && !profile.is_approved) {
     return <Navigate to="/pending-approval" replace />;

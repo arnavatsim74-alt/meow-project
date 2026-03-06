@@ -117,8 +117,8 @@ Deno.serve(async (req) => {
           console.log(`✓ Found ATIS in session "${session.name}"`);
           break;
         }
-      } catch (e) {
-        console.log(`Error fetching ATIS from session ${session.name}:`, e.message);
+      } catch (e: any) {
+        console.log(`Error fetching ATIS from session ${session.name}:`, e?.message);
         continue;
       }
     }
