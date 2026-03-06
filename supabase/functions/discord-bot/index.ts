@@ -152,10 +152,10 @@ async function getUserStats(supabase: any, userId: string) {
     .eq('status', 'approved')
     .order('submitted_at', { ascending: true })
   
-  const approvedPireps = pireps || []
+  const approvedPireps: any[] = pireps || []
   const totalFlights = approvedPireps.length
-  const totalHours = approvedPireps.reduce((sum, p) => sum + (p.flight_time_hrs || 0) + ((p.flight_time_mins || 0) / 60), 0)
-  const totalEarnings = approvedPireps.reduce((sum, p) => sum + (p.money_earned || 0), 0)
+  const totalHours = approvedPireps.reduce((sum: number, p: any) => sum + (p.flight_time_hrs || 0) + ((p.flight_time_mins || 0) / 60), 0)
+  const totalEarnings = approvedPireps.reduce((sum: number, p: any) => sum + (p.money_earned || 0), 0)
   
   return {
     profile,
@@ -165,7 +165,7 @@ async function getUserStats(supabase: any, userId: string) {
       totalEarnings,
       rank: getRankName(totalHours)
     },
-    recentPIREPs: approvedPireps.slice(-30).map(p => ({
+    recentPIREPs: approvedPireps.slice(-30).map((p: any) => ({
       date: p.submitted_at,
       hours: ((p.flight_time_hrs || 0) + ((p.flight_time_mins || 0) / 60)).toFixed(1),
       earnings: p.money_earned || 0
@@ -825,9 +825,9 @@ Deno.serve(async (req) => {
     }
     
     if (interaction.type === 3) {
-      const customId = interaction.data?.options?.[0]?.name || ''
+      const customId = interaction.data?.custom_id || ''
       const discordId = interaction.member?.user?.id || ''
-      const values = (interaction.data?.options || []).map((o: any) => o.value as string)
+      const values = interaction.data?.values || []
       
       const response = await handleComponentInteraction(customId, discordId, values)
       return new Response(JSON.stringify(response), {
