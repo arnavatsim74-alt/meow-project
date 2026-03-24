@@ -1,55 +1,55 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { corsHeaders, json } from "../_shared/http.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-interface UserStatsRequest {
-  userIds?: string[];      // Infinite Flight User IDs
-  userHashes?: string[];   // Infinite Flight User hashes
-  discordId?: string;      // Discord User ID
+// TTL cache for user stats (5 min per API rules)
+const cache = new Map<string, { data: unknown; time: number }>();
+function getCached<T>(key: string, ttlMs: number): T | null {
+  const entry = cache.get(key);
+  if (entry && Date.now() - entry.time < ttlMs) return entry.data as T;
+  return null;
+}
+function setCache(key: string, data: unknown) {
+  cache.set(key, { data, time: Date.now() });
 }
 
-serve(async (req) => {
-  // Handle CORS preflight requests
+interface UserStatsRequest {
+  userIds?: string[];
+  userHashes?: string[];
+  discordId?: string;
+}
+
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const apiKey = Deno.env.get('INFINITE_FLIGHT_API_KEY');
-    if (!apiKey) {
-      throw new Error('INFINITE_FLIGHT_API_KEY not configured');
-    }
+    if (!apiKey) throw new Error('INFINITE_FLIGHT_API_KEY not configured');
 
     const body: UserStatsRequest = await req.json();
-    console.log('Fetching user stats for:', body);
 
-    // Build request body for IF API
-    const ifRequestBody: any = {};
-    
-    if (body.userIds && body.userIds.length > 0) {
-      ifRequestBody.userIds = body.userIds;
-    }
-    if (body.userHashes && body.userHashes.length > 0) {
-      ifRequestBody.userHashes = body.userHashes;
-    }
-    if (body.discordId) {
-      ifRequestBody.discordId = body.discordId;
-    }
+    const ifRequestBody: Record<string, unknown> = {};
+    if (body.userIds?.length) ifRequestBody.userIds = body.userIds;
+    if (body.userHashes?.length) ifRequestBody.userHashes = body.userHashes;
+    if (body.discordId) ifRequestBody.discordId = body.discordId;
 
-    // Validate we have at least one identifier
     if (!ifRequestBody.userIds && !ifRequestBody.userHashes && !ifRequestBody.discordId) {
-      throw new Error('At least one identifier (userIds, userHashes, or discordId) is required');
+      throw new Error('At least one identifier required');
     }
 
-    // Call Infinite Flight User Stats API
+    // Check cache (5 min for user data)
+    const cacheKey = `users_${JSON.stringify(ifRequestBody)}`;
+    const cached = getCached<unknown[]>(cacheKey, 5 * 60 * 1000);
+    if (cached) {
+      return json({ success: true, users: cached });
+    }
+
     const response = await fetch(
-      `https://api.infiniteflight.com/public/v2/users?apikey=${apiKey}`,
+      `https://api.infiniteflight.com/public/v2/users`,
       {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(ifRequestBody),
@@ -58,40 +58,20 @@ serve(async (req) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('IF API error:', response.status, errorText);
-      throw new Error(`Infinite Flight API error: ${response.status}`);
+      throw new Error(`IF API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
-    console.log('IF User Stats response:', JSON.stringify(data).substring(0, 500));
-
-    // The API returns { errorCode, result } where result is an array of user stats
     if (data.errorCode !== 0) {
-      throw new Error(`IF API returned error code: ${data.errorCode}`);
+      throw new Error(`IF API error code: ${data.errorCode}`);
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        users: data.result || [],
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
-    );
+    const users = data.result || [];
+    setCache(cacheKey, users);
+
+    return json({ success: true, users });
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Error fetching IF user stats:', errorMessage);
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: errorMessage,
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      }
-    );
+    return json({ success: false, error: errorMessage }, { status: 500 });
   }
 });

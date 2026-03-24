@@ -1,7 +1,15 @@
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, json } from "../_shared/http.ts";
+
+// Cache airport info for 60+ min per API rules (reference data)
+const cache = new Map<string, { data: unknown; time: number }>();
+function getCached<T>(key: string, ttlMs: number): T | null {
+  const entry = cache.get(key);
+  if (entry && Date.now() - entry.time < ttlMs) return entry.data as T;
+  return null;
+}
+function setCache(key: string, data: unknown) {
+  cache.set(key, { data, time: Date.now() });
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -13,54 +21,44 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get('INFINITE_FLIGHT_API_KEY');
 
     if (!apiKey) {
-      console.error('INFINITE_FLIGHT_API_KEY not configured');
-      return new Response(
-        JSON.stringify({ success: false, error: 'Infinite Flight API key not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return json({ success: false, error: 'API key not configured' }, { status: 500 });
     }
-
     if (!icao) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'ICAO code is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return json({ success: false, error: 'ICAO code is required' }, { status: 400 });
     }
 
     const formattedIcao = icao.toUpperCase().trim();
-    const url = `https://api.infiniteflight.com/public/v2/airport/${formattedIcao}?apikey=${apiKey}`;
 
-    console.log(`Fetching airport info for: ${formattedIcao}`);
+    // Check cache (60 min for airport reference data)
+    const cacheKey = `airport_${formattedIcao}`;
+    const cached = getCached<unknown>(cacheKey, 60 * 60 * 1000);
+    if (cached) {
+      return json({ success: true, data: cached });
+    }
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'AFLV-Operations/1.0',
-      },
-    });
+    const response = await fetch(
+      `https://api.infiniteflight.com/public/v2/airport/${formattedIcao}`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Accept': 'application/json',
+        },
+      }
+    );
 
     if (!response.ok) {
-      console.error(`Infinite Flight API error: ${response.status}`);
-      return new Response(
-        JSON.stringify({ success: false, error: `API request failed: ${response.status}` }),
-        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return json({ success: false, error: `API request failed: ${response.status}` }, { status: response.status });
     }
 
     const data = await response.json();
-    console.log(`Successfully fetched airport info for ${formattedIcao}`);
+    if (data.result) {
+      setCache(cacheKey, data.result);
+    }
 
-    return new Response(
-      JSON.stringify({ success: true, data: data.result }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return json({ success: true, data: data.result });
   } catch (error) {
-    console.error('Error fetching airport info:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch airport info';
-    return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return json({ success: false, error: errorMessage }, { status: 500 });
   }
 });

@@ -32,7 +32,7 @@ const pilotNavItems = [
   { icon: BookOpen, label: 'Logbook', href: '/logbook' },
   { icon: FileText, label: 'NOTAM', href: '/notams' },
   { icon: Plane, label: 'Aeronautical Charts', href: '/charts' },
-  { icon: Award, label: 'Crew Center', href: 'https://crew.aeroflotvirtual.dpdns.org', external: true },
+  { icon: Award, label: 'Crew Center', href: 'https://crew-aflv.vercel.app', external: true },
   { icon: BookOpen, label: 'Panel Manual', href: 'https://www.aeroflotvirtual.dpdns.org', external: true },
 ];
 
