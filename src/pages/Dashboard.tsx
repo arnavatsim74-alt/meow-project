@@ -8,7 +8,7 @@ import { NotamCard } from '@/components/dashboard/NotamCard';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { formatCurrency } from '@/lib/currency';
-import { getRankByHours, getNextRank, getProgressToNextRank } from '@/lib/ranks';
+import { getRankByHours, getNextRank, getProgressToNextRank, fetchRanksFromDB } from '@/lib/ranks';
 
 interface DispatchLeg {
   id: string;
@@ -44,11 +44,16 @@ export default function Dashboard() {
   const [dispatchLegs, setDispatchLegs] = useState<DispatchLeg[]>([]);
   const [recentPireps, setRecentPireps] = useState<RecentPirep[]>([]);
   const [activeTypeRating, setActiveTypeRating] = useState<ActiveTypeRating | null>(null);
+  const [ranksLoaded, setRanksLoaded] = useState(false);
 
   const totalHours = profile?.total_hours || 0;
   const currentRank = getRankByHours(totalHours);
   const nextRank = getNextRank(currentRank);
   const { progress, hoursToGo } = getProgressToNextRank(totalHours);
+
+  useEffect(() => {
+    fetchRanksFromDB().then(() => setRanksLoaded(true));
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -61,16 +66,11 @@ export default function Dashboard() {
   const fetchActiveTypeRating = async () => {
     const { data } = await supabase
       .from('type_ratings')
-      .select(`
-        aircraft:aircraft(name, type_code, family)
-      `)
+      .select(`aircraft:aircraft(name, type_code, family)`)
       .eq('user_id', user!.id)
       .eq('is_active', true)
       .single();
-    
-    if (data) {
-      setActiveTypeRating(data as unknown as ActiveTypeRating);
-    }
+    if (data) setActiveTypeRating(data as unknown as ActiveTypeRating);
   };
 
   const fetchDispatchLegs = async () => {
@@ -94,6 +94,7 @@ export default function Dashboard() {
     if (data) setRecentPireps(data);
   };
 
+  // Show loading only while auth is resolving
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -102,8 +103,10 @@ export default function Dashboard() {
     );
   }
 
+  // Redirect immediately if not logged in - no hanging spinner
   if (!user) return <Navigate to="/auth" replace />;
   
+  // Profile still loading (brief moment after auth resolves)
   if (!profile) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -118,7 +121,6 @@ export default function Dashboard() {
 
   return (
     <DashboardLayout>
-      {/* Welcome Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Captain's Deck</h1>
@@ -127,7 +129,6 @@ export default function Dashboard() {
         <StatusBadge status="active" />
       </div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-card rounded-xl border border-border p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -167,7 +168,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Base & Aircraft Info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div className="bg-card rounded-xl border border-border p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -175,9 +175,7 @@ export default function Dashboard() {
           </div>
           <div className="min-w-0">
             <p className="text-sm text-muted-foreground">Home Base</p>
-            <p className="text-lg font-bold text-card-foreground truncate">
-              {profile?.base_airport || 'Not Set'}
-            </p>
+            <p className="text-lg font-bold text-card-foreground truncate">{profile?.base_airport || 'Not Set'}</p>
           </div>
         </div>
         <div className="bg-card rounded-xl border border-border p-4 flex items-center gap-3">
@@ -233,7 +231,6 @@ export default function Dashboard() {
         </SectionCard>
       </div>
 
-      {/* Rank Progress */}
       <div className="mt-6">
         <div className="bg-card rounded-xl border border-border p-6">
           <h3 className="text-lg font-bold text-card-foreground mb-1">
