@@ -111,8 +111,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error };
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      return { error };
+    } catch (err) {
+      return { error: new Error('Network error — please check your connection and try again.') };
+    }
   };
 
   const signUp = async (email: string, password: string, name: string, callsign: string, baseAirport: string = 'UUEE', simbriefPid?: string, ifcUsername?: string) => {
