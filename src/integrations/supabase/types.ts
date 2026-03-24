@@ -414,6 +414,8 @@ export type Database = {
           base_airport: string | null
           callsign: string
           created_at: string
+          discord_id: string | null
+          discord_username: string | null
           id: string
           ifc_username: string | null
           is_approved: boolean
@@ -432,6 +434,8 @@ export type Database = {
           base_airport?: string | null
           callsign: string
           created_at?: string
+          discord_id?: string | null
+          discord_username?: string | null
           id?: string
           ifc_username?: string | null
           is_approved?: boolean
@@ -450,6 +454,8 @@ export type Database = {
           base_airport?: string | null
           callsign?: string
           created_at?: string
+          discord_id?: string | null
+          discord_username?: string | null
           id?: string
           ifc_username?: string | null
           is_approved?: boolean
@@ -462,6 +468,30 @@ export type Database = {
           updated_at?: string
           user_id?: string
           xp?: number
+        }
+        Relationships: []
+      }
+      ranks: {
+        Row: {
+          created_at: string
+          id: string
+          min_hours: number
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          min_hours?: number
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          min_hours?: number
+          name?: string
+          sort_order?: number
         }
         Relationships: []
       }
